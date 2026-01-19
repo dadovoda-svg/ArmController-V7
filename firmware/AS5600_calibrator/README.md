@@ -250,3 +250,6 @@ To rotate faster/slower, change `8000` (microseconds).
   * available GPIOs for STEP/DIR/EN and buttons
 
 ---
+## Licenza
+
+MIT
