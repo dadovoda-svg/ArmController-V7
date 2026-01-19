@@ -359,8 +359,8 @@ void setup()
 
   stopMotors();  // inizialmente fermi
 
-  //solo per teste velocità
-  steppers.setStepsPerRevolution(2, 3200);
+  //solo per test velocità
+  steppers.setStepsPerRevolution(3, 3200);
 }
 
 // =========================
@@ -375,9 +375,10 @@ void loop()
   cfgConsole.update();
 
   handleButtons();
+
   // la generazione degli step avviene nel callback dell'esp_timer su core 0
 
-  steppers.setSpeedDegPerSec(2, 90);
+  steppers.setSpeedDegPerSec (3, 90.0);
 
   uint8_t ch = (uint8_t)currentEncoderChannel;
   // va richiamato con cadenza regolare
@@ -419,6 +420,7 @@ void loop()
   //     Serial1.println (joints.lastCmd(ch));
   //   }
   // }
+  
 }
 
 // =========================
