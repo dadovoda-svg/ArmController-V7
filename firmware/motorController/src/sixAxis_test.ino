@@ -358,6 +358,9 @@ void setup()
   }
 
   stopMotors();  // inizialmente fermi
+
+  //solo per teste velocità
+  steppers.setStepsPerRevolution(2, 3200);
 }
 
 // =========================
@@ -374,46 +377,48 @@ void loop()
   handleButtons();
   // la generazione degli step avviene nel callback dell'esp_timer su core 0
 
+  steppers.setSpeedDegPerSec(2, 90);
+
   uint8_t ch = (uint8_t)currentEncoderChannel;
   // va richiamato con cadenza regolare
-  if (timeNow >= nextPID) {
-    nextPID = timeNow + (uint64_t)PID_PERIOD_uS;
-    joints.update();
-  }
-  if (timeNow >= nextTick) {
-    nextTick = timeNow + (uint64_t)PID_PERIOD_uS;
+  // if (timeNow >= nextPID) {
+  //   nextPID = timeNow + (uint64_t)PID_PERIOD_uS;
+  //   joints.update();
+  // }
+  // if (timeNow >= nextTick) {
+  //   nextTick = timeNow + (uint64_t)PID_PERIOD_uS;
 
-    if (motorsRunning) {
-      switch (demoType) {
-        case 0:
-          joints.setTarget (ch, 110.0 * sin( millis() * 0.0001 ));
-          break;
-        case 1:
-          joints.setTarget (ch, 110.0 * sin( millis() * 0.00025 ));
-          break;
-        case 2:
-          joints.setTarget (ch, 110.0 * sin( millis() * 0.0005 ));
-          break;
-        case 3:
-          joints.setTarget (ch, -100.0 + 10.0 * int((millis()%60000)/3000.0));
-          break;
-      }
-    }
+  //   if (motorsRunning) {
+  //     switch (demoType) {
+  //       case 0:
+  //         joints.setTarget (ch, 110.0 * sin( millis() * 0.0001 ));
+  //         break;
+  //       case 1:
+  //         joints.setTarget (ch, 110.0 * sin( millis() * 0.00025 ));
+  //         break;
+  //       case 2:
+  //         joints.setTarget (ch, 110.0 * sin( millis() * 0.0005 ));
+  //         break;
+  //       case 3:
+  //         joints.setTarget (ch, -100.0 + 10.0 * int((millis()%60000)/3000.0));
+  //         break;
+  //     }
+  //   }
     
-    if (displayEnabled) {
-      updateDisplay();
-    }
-    if (traceEnabled) {
-      //Serial1.print ("T:");
-      Serial1.print (joints.getTarget(ch));
-      Serial1.print (",");
-      //Serial1.print (" M:");
-      Serial1.print (joints.getLastMeas(ch));
-      Serial1.print (",");
-      //Serial1.print (" C:");
-      Serial1.println (joints.lastCmd(ch));
-    }
-  }
+  //   if (displayEnabled) {
+  //     updateDisplay();
+  //   }
+  //   if (traceEnabled) {
+  //     //Serial1.print ("T:");
+  //     Serial1.print (joints.getTarget(ch));
+  //     Serial1.print (",");
+  //     //Serial1.print (" M:");
+  //     Serial1.print (joints.getLastMeas(ch));
+  //     Serial1.print (",");
+  //     //Serial1.print (" C:");
+  //     Serial1.println (joints.lastCmd(ch));
+  //   }
+  // }
 }
 
 // =========================
