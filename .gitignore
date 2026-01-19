@@ -1,8 +1,32 @@
-.pio
-.build/
-.vscode/
-*.log
+# --- PlatformIO ---
+.pio/
+.pioenvs/
+.piolibdeps/
+.pio/build/
+.pio/libdeps/
+.pio/.cache/
 *.elf
 *.bin
 *.hex
+*.map
+
+# --- Build output (generic) ---
+build/
+_build/
+out/
+dist/
+cmake-build-*/
+
+# --- VS Code (local workspace settings) ---
+.vscode/
+
+# --- Logs / temp ---
+*.log
+*.tmp
+*.bak
+
+# --- OS / editor noise ---
 .DS_Store
+Thumbs.db
+*~
+*.swp
