@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "Dado.schlib")(type "KiCad")(uri "/home/davide/Documents/Projects/shared/libraries/KiCad/AADF_Components.kicad_sym")(options "")(descr ""))
+)

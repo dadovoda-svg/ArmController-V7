@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "Dado.pcblib")(type "KiCad")(uri "/home/davide/Documents/Projects/shared/libraries/KiCad/Custom.pretty")(options "")(descr ""))
+)
