@@ -24,7 +24,7 @@
 #define OLED_RESET    -1        // nessun pin di reset dedicato
 #define OLED_ADDRESS  0x3C
 
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET, 400000UL, 400000UL);
 
 // =========================
 // Pin motori (adatta ai tuoi)
@@ -40,14 +40,16 @@ MultiStepper6 steppers(STEP_PINS, DIR_PINS, 3.0f, 100); // pulseWidth=3µs, time
 #define TCA_ADDRESS   0x70
 #define AS5600_ADDR   0x36
 // se definito forza la lettura di un solo encoder. MODIFICARE ANCHE NEGLI ALTRI SORGENTI
-bool encoderEnabled[6] = {false, false, true, false, false, false};
+bool encoderEnabled[6] = {true, true, true, true, true, true};
 
 AS5600Mux encoders(Wire, TCA_ADDRESS, AS5600_ADDR);
 
 sixAxisController joints(steppers, encoders);   // multicontroller PID per i motori dei giunti
-const uint32_t  PID_PERIOD_uS = 100;            //  500us   200Hz
-                                                //  200us   500Hz
-                                                //  100us  1000Hz
+const uint32_t  PID_PERIOD_uS = 3333;           //  5000us  200Hz
+                                                //  3333us  300Hz  
+                                                //  2500us  400Hz  <-- velocità massima reale?
+                                                //  2000us  500Hz
+
 
 const uint32_t  TICK_PERIOD_uS = 20000;  
 
@@ -271,10 +273,14 @@ void setup()
   pinMode(PIN_BTN_START_STOP, INPUT);   //vanno aggiunti i pullup esterni
   pinMode(PIN_BTN_CHANNEL,    INPUT);
 
+  pinMode(2, OUTPUT);
+  digitalWrite (2, false);
+  pinMode(0, OUTPUT);
+  digitalWrite (0, false);
   // --- I2C ---
-  Wire.begin(I2C_SDA, I2C_SCL);
-  Wire.setClock(400000UL);    // 400 kHz
-
+  //Wire.setClock(400000UL);    // 400 kHz
+  Wire.begin(I2C_SDA, I2C_SCL, 400000UL);
+  
   // --- Display OLED ---
   initDisplay();
   showWelcomeScreen();
@@ -378,48 +384,50 @@ void loop()
 
   // la generazione degli step avviene nel callback dell'esp_timer su core 0
 
-  steppers.setSpeedDegPerSec (3, 90.0);
+  //steppers.setSpeedDegPerSec (3, 20.0);
 
   uint8_t ch = (uint8_t)currentEncoderChannel;
-  // va richiamato con cadenza regolare
-  // if (timeNow >= nextPID) {
-  //   nextPID = timeNow + (uint64_t)PID_PERIOD_uS;
-  //   joints.update();
-  // }
-  // if (timeNow >= nextTick) {
-  //   nextTick = timeNow + (uint64_t)PID_PERIOD_uS;
+  //va richiamato con cadenza regolare
+  if (timeNow >= nextPID) {
+    nextPID = timeNow + (uint64_t)PID_PERIOD_uS;
+    digitalWrite (2, true);
+    joints.update();
+    digitalWrite (2, false);
+  }
+  if (timeNow >= nextTick) {
+    nextTick = timeNow + (uint64_t)PID_PERIOD_uS;
 
-  //   if (motorsRunning) {
-  //     switch (demoType) {
-  //       case 0:
-  //         joints.setTarget (ch, 110.0 * sin( millis() * 0.0001 ));
-  //         break;
-  //       case 1:
-  //         joints.setTarget (ch, 110.0 * sin( millis() * 0.00025 ));
-  //         break;
-  //       case 2:
-  //         joints.setTarget (ch, 110.0 * sin( millis() * 0.0005 ));
-  //         break;
-  //       case 3:
-  //         joints.setTarget (ch, -100.0 + 10.0 * int((millis()%60000)/3000.0));
-  //         break;
-  //     }
-  //   }
+    if (motorsRunning) {
+      switch (demoType) {
+        case 0:
+          joints.setTarget (ch, 90.0 * sin( millis() * 0.0001 ));
+          break;
+        case 1:
+          joints.setTarget (ch, 90.0 * sin( millis() * 0.00025 ));
+          break;
+        case 2:
+          joints.setTarget (ch, 90.0 * sin( millis() * 0.0005 ));
+          break;
+        case 3:
+          joints.setTarget (ch, -90.0 + 9.0 * int((millis()%60000)/3000.0));
+          break;
+      }
+    }
     
-  //   if (displayEnabled) {
-  //     updateDisplay();
-  //   }
-  //   if (traceEnabled) {
-  //     //Serial1.print ("T:");
-  //     Serial1.print (joints.getTarget(ch));
-  //     Serial1.print (",");
-  //     //Serial1.print (" M:");
-  //     Serial1.print (joints.getLastMeas(ch));
-  //     Serial1.print (",");
-  //     //Serial1.print (" C:");
-  //     Serial1.println (joints.lastCmd(ch));
-  //   }
-  // }
+    if (displayEnabled) {
+      updateDisplay();
+    }
+    if (traceEnabled) {
+      //Serial1.print ("T:");
+      Serial1.print (joints.getTarget(ch));
+      Serial1.print (",");
+      //Serial1.print (" M:");
+      Serial1.print (joints.getLastMeas(ch));
+      Serial1.print (",");
+      //Serial1.print (" C:");
+      Serial1.println (joints.lastCmd(ch));
+    }
+  }
   
 }
 
@@ -596,7 +604,7 @@ void updateDisplay()
   display.setCursor(0, 32);
   display.print("Rvel : ");
   if (okAngle) {
-    display.print(joints.lastCmd(0),3);
+    display.print(joints.lastCmd(ch),3);
   } else {
     display.print("ERR");
   }
@@ -605,7 +613,7 @@ void updateDisplay()
   display.setCursor(0, 40);
   display.print("Mspd : ");
   if (okStat) {
-    display.print(steppers.getSpeed(0),3);
+    display.print(steppers.getSpeed(ch),3);
   } else {
     display.print("ERR");
   }
@@ -622,52 +630,3 @@ void updateDisplay()
   display.display();
 }
 
-/* ******************************************
-# configurazione j6 - stepper 0:
-spr0=3200.000000        ingranaggio diretto
-kp0=30.000000
-ki0=5.000000
-kd0=0.000000
-sm0=720.000000
-am0=2500.000000
-jm0=0.100000
-ff0=1.000000
-pt0=2.000000
-vt0=1.000000
-il0=200.000000
-lmin0=-90.000000
-lmax0=171.000000
-zoff0=180.000000
-#configurazione j5 - stepper 1
-spr0=-7085.71420        riduzione 28:62
-kp0=30.000000
-ki0=1.000000
-kd0=0.000000
-sm0=720.000000
-am0=2500.000000
-jm0=0.100000
-ff0=1.000000
-pt0=2.000000
-vt0=1.000000
-il0=200.000000
-lmin0=-112.000000
-lmax0=112.000000
-zoff0=183.000000
-#configurazione j4 - stepper 2 -      riduzione 32:32
-spr2=-3200.000000  
-kp2=20.000000
-ki2=1.000000
-kd2=0.000000
-sm2=360.000000
-am2=950.000000
-jm2=0.100000
-ff2=1.000000
-pt2=2.000000
-vt2=1.000000
-il2=200.000000
-lmin2=-130.000000
-lmax2=130.000000
-p2=5.000000
-zoff2=188.000000
-
-******************************************/

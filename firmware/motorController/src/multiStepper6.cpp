@@ -29,6 +29,9 @@ static inline void fastWritePin(uint8_t pin, bool level)
 #endif
 }
 
+static const uint8_t  MOTOR_ENABLE_PIN = 17;
+static const uint8_t  MOTOR_ENABLE_AUXPIN = 25;
+
 MultiStepper6::MultiStepper6(const uint8_t stepPins[NUM_MOTORS],
                              const uint8_t dirPins[NUM_MOTORS],
                              float   defaultPulseWidthUs,
@@ -62,6 +65,10 @@ void MultiStepper6::begin()
     fastWritePin(motors[i].stepPin, false);
     fastWritePin(motors[i].dirPin,  false);
   }
+  pinMode (MOTOR_ENABLE_PIN, OUTPUT);
+  pinMode (MOTOR_ENABLE_AUXPIN, OUTPUT);
+  fastWritePin(MOTOR_ENABLE_PIN, false);        //false = enabled
+  fastWritePin(MOTOR_ENABLE_AUXPIN, false);
 
   // Crea il timer ESP (gira nel task timer su core 0)
   esp_timer_create_args_t args = {};
@@ -209,6 +216,7 @@ void MultiStepper6::onTimer()
 
       // Genera impulso sul pin STEP
       fastWritePin(m.stepPin, true);
+      delayMicroseconds(1);
       fastWritePin(m.stepPin, false);
     }
   }

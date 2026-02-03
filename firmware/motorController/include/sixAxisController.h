@@ -60,7 +60,7 @@ public:
             _ctrl[i].setTolerances(configParams.get(szParam[1]), configParams.get(szParam[2]));
             
             _ctrl[i].setOutputMax(0.0f);
-            _ctrl[i].setDeadband(0.10f, 0.12f, 0.8f);
+            _ctrl[i].setDeadband(0.10f, 0.15f, 0.8f);
 
             // le posizioni attuali corrispondono al setpoint
             _ctrl[i].reset(joints[i]);
@@ -110,7 +110,7 @@ public:
             _ctrl[i].setTolerances(configParams.get(szParam[1]), configParams.get(szParam[2]));
 
             _ctrl[i].setOutputMax(0.0f);
-            _ctrl[i].setDeadband(0.10f, 0.12f, 0.8f);
+            _ctrl[i].setDeadband(0.10f, 0.15f, 0.8f);
         }
     }
     // ---------- Lifecycle ----------

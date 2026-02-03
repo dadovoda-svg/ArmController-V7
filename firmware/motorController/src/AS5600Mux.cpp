@@ -73,11 +73,11 @@ bool AS5600Mux::readRegisters(uint8_t encoderIndex,
   if (!selectChannel(encoderIndex)) {
     return false;
   }
-
+  
   m_wire.beginTransmission(m_encoderAddress);
   m_wire.write(regAddress);
   uint8_t err = m_wire.endTransmission(false); // repeated start
-
+  
   if (err != 0) {
     return false;
   }
@@ -122,6 +122,7 @@ bool AS5600Mux::writeRegisters(uint8_t encoderIndex,
 bool AS5600Mux::readRawAngle(uint8_t encoderIndex, uint16_t &rawAngle)
 {
   uint8_t buf[2];
+
   if (!readRegisters(encoderIndex, AS5600_REG_RAW_ANGLE_H, buf, 2)) {
     return false;
   }

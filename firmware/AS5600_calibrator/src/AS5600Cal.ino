@@ -100,7 +100,7 @@ void setup() {
   };
   esp_timer_create(&timer_args, &toggle_timer);
   // Avvia il timer ogni 500000 µs = 500 ms
-  esp_timer_start_periodic(toggle_timer, 8000);
+  esp_timer_start_periodic(toggle_timer, 1000);
 
   Serial.begin(115200);
 
