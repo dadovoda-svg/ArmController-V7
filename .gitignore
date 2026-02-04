@@ -30,3 +30,6 @@ cmake-build-*/
 Thumbs.db
 *~
 *.swp
+
+# --- KiCad backups
+ControllerV7.0-backups/

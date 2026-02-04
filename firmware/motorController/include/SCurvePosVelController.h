@@ -106,6 +106,10 @@ public:
     _fault = FaultCode::None;
     _fault_latched = false;
 
+    _meas_vel_f = 0.0f;
+    _last_meas_vel = 0.0f;
+    _last_meas_pos = measured_pos;
+
     _last_us = micros();
   }
 
@@ -158,18 +162,40 @@ public:
         _prev_meas = _ref_pos;
         _has_prev = false;
 
+        _meas_vel_f = 0.0f;
+        _last_meas_pos = _ref_pos;
+        _last_meas_vel = 0.0f;
+
         return 0.0f; // command velocity = 0 NOW
       }
     }
 
     // If fault latched, stay stopped
-    if (_fault_latched) return 0.0f;
-
+    if (_fault_latched) {
+      return 0.0f;
+    }
+    
     // ---- velocity estimate (needed for deadband and D term) ----
     float meas_vel = 0.0f;
     if (_has_prev) {
       meas_vel = (measured_pos - _prev_meas) / dt; // [deg/s]
     }
+
+    // ---- Low-pass filter on measured velocity ----
+    // tau = 0 => no filtering
+    float meas_vel_used = meas_vel;
+    if (_vel_f_tau > 0.0f) {
+      const float alpha = dt / (_vel_f_tau + dt);
+      _meas_vel_f += alpha * (meas_vel - _meas_vel_f);
+      meas_vel_used = _meas_vel_f;
+    } else {
+      _meas_vel_f = meas_vel;
+      meas_vel_used = meas_vel;
+    }
+
+    // Save last measurement for isSettled()
+    _last_meas_pos = measured_pos;
+    _last_meas_vel = meas_vel_used;
 
     // ---- Deadband check (uses target vs measured) ----
     if (_db_enabled && !_fault_latched) {
@@ -178,7 +204,8 @@ public:
 
       const float err_tgt = tgt - measured_pos;
       const float aerr = fabsf(err_tgt);
-      const float avel = fabsf(meas_vel);
+      //const float avel = fabsf(meas_vel);
+      const float avel = fabsf(meas_vel_used);
 
       if (_db_active) {
         // remain in deadband until we exceed exit threshold or we are moving too fast
@@ -190,6 +217,10 @@ public:
           _i_term  = 0.0f;     // evita micro-creep da integrale
           _prev_meas = measured_pos;
           _has_prev = true;
+          // Save last measurement for isSettled()
+          _last_meas_pos = measured_pos;
+          //_last_meas_vel = meas_vel;
+          _last_meas_vel = meas_vel_used;
           return 0.0f;
         } else {
           _db_active = false; // exit deadband -> resume control
@@ -204,6 +235,10 @@ public:
           _i_term  = 0.0f;
           _prev_meas = measured_pos;
           _has_prev = true;
+          // Save last measurement for isSettled()
+          _last_meas_pos = measured_pos;
+          //_last_meas_vel = meas_vel;
+          _last_meas_vel = meas_vel_used;
           return 0.0f;
         }
       }
@@ -216,7 +251,9 @@ public:
     const float err = _ref_pos - measured_pos;
 
     // 3) Derivative on measurement (recommended with moving setpoint)
-    const float d = -_g.kd * meas_vel;
+    //const float d = -_g.kd * meas_vel;
+    const float d = -_g.kd * meas_vel_used;
+
     // e solo qui aggiorni lo stato "prev"
     _prev_meas = measured_pos;
     _has_prev = true;
@@ -267,12 +304,35 @@ public:
     _db_active = false;
   }
 
+  void setVelocityFilterTau(float tau_s) {
+    _vel_f_tau = fmaxf(tau_s, 0.0f);   // 0 disables filtering
+  }
+
+
   void disableDeadband() {
     _db_enabled = false;
     _db_active = false;
   }
 
   bool inDeadband() const { return _db_active; }
+
+  bool isSettled() const {
+    if (_fault_latched) return false;
+
+    // Se la deadband è attiva, per definizione siamo "fermi a target"
+    if (_db_enabled && _db_active) return true;
+
+    // Serve una definizione di "settled": usiamo le tolleranze
+    if (_tol.pos <= 0.0f || _tol.vel <= 0.0f) return false;
+
+    float tgt = _target;
+    if (_limits_enabled) tgt = clampf(tgt, _pos_min, _pos_max);
+
+    const float pos_err = fabsf(tgt - _last_meas_pos);
+    const float vel_abs = fabsf(_last_meas_vel);
+
+    return (pos_err <= _tol.pos) && (vel_abs <= _tol.vel);
+  }
 
 private:
   Limits _lim{};
@@ -313,6 +373,14 @@ private:
   float _db_enter   = 0.0f;   // [deg]
   float _db_exit    = 0.0f;   // [deg]
   float _db_vel     = 0.5f;   // [deg/s]
+
+  // last measurement (for isSettled)
+  float _last_meas_pos = 0.0f;
+  float _last_meas_vel = 0.0f;
+
+  // filtered measured velocity (for D, deadband, isSettled)
+  float _meas_vel_f = 0.0f;
+  float _vel_f_tau  = 0.05f;   // [s] default 50ms (good @200Hz)
 
 
   static float clampf(float x, float lo, float hi) {

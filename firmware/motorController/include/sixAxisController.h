@@ -20,7 +20,6 @@ public:
     void loadParams (ConfigStore &configParams, float joints[sixAxisController::NUM_JOINTS]) {
         char szParam[4][8];
         for (int i = 0; i < sixAxisController::NUM_JOINTS; ++i) {
-
             // limiti meccanici
             strcpy (szParam[0], "lmin0");
             szParam[0][4] = '0' + i;
@@ -60,15 +59,17 @@ public:
             _ctrl[i].setTolerances(configParams.get(szParam[1]), configParams.get(szParam[2]));
             
             _ctrl[i].setOutputMax(0.0f);
-            _ctrl[i].setDeadband(0.10f, 0.15f, 0.8f);
+            _ctrl[i].setDeadband(0.18f, 0.35f, 0.8f);
+            _ctrl[i].setVelocityFilterTau(0.04f);            //0.05f adatto per 200Hz 0.03f adatto per 333Hz
 
             // le posizioni attuali corrispondono al setpoint
             _ctrl[i].reset(joints[i]);
             _lastPos[i] = joints[i];
-            }
+        }
     }
-        //ricarica tutti i parametri dei PID
-        void reloadParams (ConfigStore &configParams) {
+
+    //ricarica tutti i parametri dei PID
+    void reloadParams (ConfigStore &configParams) {
         char szParam[4][8];
         for (int i = 0; i < sixAxisController::NUM_JOINTS; ++i) {
             // limiti meccanici
@@ -110,7 +111,8 @@ public:
             _ctrl[i].setTolerances(configParams.get(szParam[1]), configParams.get(szParam[2]));
 
             _ctrl[i].setOutputMax(0.0f);
-            _ctrl[i].setDeadband(0.10f, 0.15f, 0.8f);
+            _ctrl[i].setDeadband(0.18f, 0.35f, 0.8f);
+            _ctrl[i].setVelocityFilterTau(0.04f);           //0.05f adatto per 200Hz 0.03f adatto per 333Hz
         }
     }
     // ---------- Lifecycle ----------
@@ -171,11 +173,23 @@ public:
         return _lastPos[joint];
     }
 
-  // Optional debug access
-  float refPos(uint8_t i) const { return _ctrl[i].refPos(); }
-  float refVel(int8_t i) const { return _ctrl[i].refVel(); }
-  float refAcc(int8_t i) const { return _ctrl[i].refAcc(); }
-  float lastCmd(int8_t i) const { return _lastVel[i]; }
+    void setLimits (int8_t joint, float v_max, float a_max) {
+        _ctrl[joint].setLimits (v_max, a_max);
+    }
+
+    void setSCurveTime (int8_t joint, float t_jerk_s) {
+        _ctrl[joint].setSCurveTime(t_jerk_s);
+    }
+
+    float isSettled (uint8_t joint) {
+        return _ctrl[joint].isSettled();
+    }
+
+    // Optional debug access
+    float refPos(uint8_t i) const { return _ctrl[i].refPos(); }
+    float refVel(int8_t i) const { return _ctrl[i].refVel(); }
+    float refAcc(int8_t i) const { return _ctrl[i].refAcc(); }
+    float lastCmd(int8_t i) const { return _lastVel[i]; }
 
 private:
     MultiStepper6   &_steppers;

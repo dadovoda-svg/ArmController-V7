@@ -9,6 +9,7 @@
 #include "ConfigStore.h"
 #include "ConfigConsole.h"
 #include "sixAxisController.h"
+#include "ArmGCode.h"
 
 // =========================
 // Configurazione i2c
@@ -170,6 +171,53 @@ bool traceEnabled = false;
 bool displayEnabled = false;
 uint8_t demoType = 0;
 
+static bool g_motors_enabled = false;
+static bool g_is_homed = false;
+ArmGCodeConfig gcfg;
+PlannerConfig pcfg;
+ArmGCode gcode(gcfg, pcfg);
+
+// --- Required by planner ---
+static void set_target_all(const float joints_deg[6]) {
+  joints.setTarget ((float*)joints_deg);
+}
+
+static float get_target_one(uint8_t joint) {
+  return joints.getTarget (joint);
+}
+
+static void set_limits_one(uint8_t joint, float v_max, float a_max) {
+  joints.setLimits (joint, v_max, a_max);      //vMax, aMax
+}
+
+static void set_scurve_time_one(uint8_t joint, float t_jerk_s) {
+  joints.setSCurveTime(joint, t_jerk_s);
+}
+
+static bool is_settled_one(uint8_t joint) {
+  return joints.isSettled(joint);
+}
+
+// --- Motors/homing wrappers ---  TODO: da completare l'implementazione
+static bool get_motors_enabled() { return g_motors_enabled; }
+static void set_motors_enabled(bool en) {
+  g_motors_enabled = en;
+  // arm.enableMotors(en);
+}
+
+static bool get_is_homed() { return g_is_homed; }
+
+static bool do_homing_all() {
+  // run your homing routine (blocking in this example)
+  // if successful:
+  g_is_homed = true;
+  return true;
+}
+
+static void estop_now() {
+  // immediately stop outputs / power stage
+}
+
 // Callback chiamata quando un parametro cambia
 void onConfigChanged(void* userData, const char* key, float oldVal, float newVal)
 {
@@ -185,7 +233,6 @@ void onConfigChanged(void* userData, const char* key, float oldVal, float newVal
 
   // Imposta un flag globale, che il loop() potrà usare
   configChanged = true;
-
 
   if (strcmp(key, "ch") == 0) //i canali vanno da 1 a 6
   {
@@ -324,7 +371,7 @@ void setup()
         Serial.print(i);
         Serial.println(" disabilitato");      
     }
-    Serial1.println ("target, meas");
+    Serial1.println ("## *target, meas");
   }
 
   //inizializza i parametri e fissa la posizione attuale come setpoint
@@ -365,8 +412,37 @@ void setup()
 
   stopMotors();  // inizialmente fermi
 
-  //solo per test velocità
-  steppers.setStepsPerRevolution(3, 3200);
+  // Planner init
+  // Tune planner profiles here
+  gcfg.queue_max = 16;
+  gcfg.v_default = 20.0f;
+  gcfg.v_default_rapid = 40.0f;
+
+  pcfg.queue_max = gcfg.queue_max;
+  pcfg.prof_G1 = {120.0f, 0.050f}; // a_max, t_jerk
+  pcfg.prof_G0 = {240.0f, 0.030f};
+
+  ArmGCodeHooks hooks;
+  hooks.get_motors_enabled = get_motors_enabled;
+  hooks.set_motors_enabled = set_motors_enabled;
+  hooks.get_is_homed = get_is_homed;
+  hooks.do_homing_all = do_homing_all;
+  hooks.estop_now = estop_now;
+
+  hooks.set_target_all = set_target_all;
+  hooks.get_target_one = get_target_one;
+
+  hooks.set_limits_one = set_limits_one;
+  hooks.set_scurve_time_one = set_scurve_time_one;
+
+  hooks.is_settled_one = is_settled_one;
+
+  // Optional: if you can read real position, hook it for M114
+  // hooks.get_joint_position_deg = ...
+
+  gcode.begin(Serial1, hooks);
+
+  Serial1.println("## ArmFW AGC1 ready");
 }
 
 // =========================
@@ -417,8 +493,10 @@ void loop()
     if (displayEnabled) {
       updateDisplay();
     }
+
     if (traceEnabled) {
-      //Serial1.print ("T:");
+      //Serial1.print ("## *T:");
+      Serial1.print ("## * ");
       Serial1.print (joints.getTarget(ch));
       Serial1.print (",");
       //Serial1.print (" M:");
