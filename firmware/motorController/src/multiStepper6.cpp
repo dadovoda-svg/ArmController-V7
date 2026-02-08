@@ -69,8 +69,11 @@ void MultiStepper6::begin()
   pinMode (MOTOR_ENABLE_AUXPIN, OUTPUT);
   fastWritePin(MOTOR_ENABLE_PIN, false);        //false = enabled
   fastWritePin(MOTOR_ENABLE_AUXPIN, false);
+  //motori temporaneamente disabilitati per il primo run
+  // fastWritePin(MOTOR_ENABLE_PIN, true);        //false = enabled
+  // fastWritePin(MOTOR_ENABLE_AUXPIN, true);
 
-  // Crea il timer ESP (gira nel task timer su core 0)
+  // Crea il timer ESP (gira nel task timer su core 0)list
   esp_timer_create_args_t args = {};
   args.callback        = &MultiStepper6::timerCallback;
   args.arg             = this;

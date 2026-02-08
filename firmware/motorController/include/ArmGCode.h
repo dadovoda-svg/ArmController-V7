@@ -32,8 +32,10 @@ struct PlannerProfile {
 struct PlannerConfig {
   uint8_t queue_max = 16;
 
-  PlannerProfile prof_G1{120.0f, 0.050f};
-  PlannerProfile prof_G0{240.0f, 0.030f};
+  // PlannerProfile prof_G1{120.0f, 0.050f};
+  // PlannerProfile prof_G0{240.0f, 0.030f};
+  PlannerProfile prof_G1{36.0f, 0.050f};
+  PlannerProfile prof_G0{72.0f, 0.030f};
 
   float min_delta_deg = 0.001f; // joints below this delta are treated as not moving
 

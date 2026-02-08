@@ -108,6 +108,9 @@ void PlannerCoordinator::startMove(const Move& m) {
       float vi = f_max(_cfg.min_v_deg_s,  Vbase * r);
       float ai = f_max(_cfg.min_a_deg_s2, Abase * r);
 
+      Serial1.printf ("## J:%d Vm %4.1f Am %4.1f", i, vi, ai);
+      Serial1.println (" - ");
+
       _hooks.set_limits_one((uint8_t)i, vi, ai);
       _hooks.set_scurve_time_one((uint8_t)i, Tj);
       _moving_mask |= (1u << i);
@@ -169,23 +172,45 @@ void ArmGCode::poll() {
   }
 }
 
+bool _sawLineEnd = false;  // true se abbiamo appena chiuso riga (CR/LF)
+char _lastEol = 0;         // ultimo terminatore visto: '\r' o '\n'
+
 bool ArmGCode::readLine() {
   while (_io->available() > 0) {
     int c = _io->read();
     if (c < 0) break;
 
-    if (c == '\r') continue;
+    //_io->write(c);
+    char ch = (char)c;
 
-    if (c == '\n') {
+    // Se abbiamo appena chiuso una riga, assorbi l'eventuale "secondo" terminatore
+    // (gestisce CRLF e LFCR senza generare una riga vuota)
+    if (_sawLineEnd) {
+      _sawLineEnd = false;
+      if ((ch == '\n' && _lastEol == '\r') || (ch == '\r' && _lastEol == '\n')) {
+        // swallow
+        continue;
+      }
+      // altrimenti il char è parte della prossima riga e va processato normalmente
+    }
+
+    // Fine riga: CR oppure LF
+    if (ch == '\n' || ch == '\r') {
       _lineBuf[_lineLen] = '\0';
       _lineLen = 0;
+
+      _sawLineEnd = true;
+      _lastEol = ch;
+
       return true;
     }
 
+    // Accumula caratteri
     if (_lineLen < _cfg.line_max) {
-      _lineBuf[_lineLen++] = (char)c;
+      _lineBuf[_lineLen++] = ch;
     } else {
-      // saturate; we'll flag it in handleLine
+      // overflow: continua a consumare fino al terminatore, poi segnala in handleLine()
+      // saturiamo per far scattare il check "line_too_long"
       _lineLen = _cfg.line_max;
     }
   }
@@ -294,6 +319,8 @@ bool ArmGCode::parseParams(const Tokens& tk, uint8_t start, Params& p) {
 }
 
 void ArmGCode::handleLine(char* line) {
+  //_io->print("rcv ");
+  //_io->println(line);
   if (strlen(line) >= _cfg.line_max) { sendErr("line_too_long"); return; }
 
   stripComment(line);

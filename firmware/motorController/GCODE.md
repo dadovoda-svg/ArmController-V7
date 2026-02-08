@@ -38,15 +38,16 @@ Esempio:
 
 ---
 
-## 2) Regola Out-of-Band: righe `## ` (solo output)
+## 2) Regola Out-of-Band: righe `## ` oppure `@ ` (solo output)
 
 Il canale di output può includere righe non appartenenti al protocollo che iniziano con:
 
 - prefisso ESATTO: `## ` (due `#` + spazio)
+- prefisso ESATTO: `@ ` (un `@` + spazio)
 
 ### 2.1 Requisito lato host
 Quando l’host attende la risposta a un comando deve:
-- ignorare tutte le righe che iniziano con `## `
+- ignorare tutte le righe che iniziano con `## ` oppure con `@ ` 
 - considerare terminata la risposta quando riceve:
   - `ok` oppure
   - `error:<code> ...`
@@ -338,7 +339,7 @@ ok
 ## 9) Comportamento host consigliato (minimo)
 - Invia una riga comando.
 - Legge righe finché:
-  - ignora `## ...`
+  - ignora `## ...` e `@ ...`
   - se `ok` → successo
   - se `error:` → errore
   - altrimenti → considera la riga “dati” e continua fino a `ok/error`.

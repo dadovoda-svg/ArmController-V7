@@ -46,7 +46,7 @@ bool encoderEnabled[6] = {true, true, true, true, true, true};
 AS5600Mux encoders(Wire, TCA_ADDRESS, AS5600_ADDR);
 
 sixAxisController joints(steppers, encoders);   // multicontroller PID per i motori dei giunti
-const uint32_t  PID_PERIOD_uS = 3333;           //  5000us  200Hz
+const uint32_t  PID_PERIOD_uS = 5000;           //  5000us  200Hz
                                                 //  3333us  300Hz  
                                                 //  2500us  400Hz  <-- velocità massima reale?
                                                 //  2000us  500Hz
@@ -55,13 +55,13 @@ const uint32_t  PID_PERIOD_uS = 3333;           //  5000us  200Hz
 const uint32_t  TICK_PERIOD_uS = 20000;  
 
 // Definizione parametri
-ConfigParam configParams[] = {
-    { "spr0",   3200.0f,   0.0f },    //step per revolution - microstepping 16x (un valore negativo inverte la direzione)
+ConfigParam configParams[] = {        //corrente 0.67A
+    { "spr0",  6400.00f,   0.0f },    //J1 - 200 s/giro, trasmissione 1:1, microstepping 1/32, polarità pos. -->  6400.00
     { "kp0",       2.0f,   0.0f },    //pid Propotional
     { "ki0",       0.1f,   0.0f },    //pid Integral
     { "kd0",       0.0f,   0.0f },    //pid Differential
-    { "sm0",     360.0f,   0.0f },    //velocità massima in gradi al secondo
-    { "am0",     720.0f,   0.0f },    //accelerazione massima in gradi al secondo quadrato
+    { "sm0",      90.0f,   0.0f },    //velocità massima in gradi al secondo
+    { "am0",      90.0f,   0.0f },    //accelerazione massima in gradi al secondo quadrato
     { "jm0",      0.10f,   0.0f },    //t_jerk (S-curve time): 0,10 s → jerk = a_max / t_jerk = 3000 deg/s³
     { "ff0",      1.00f,   0.0f },    //feed-forward multiplier for profile velocity (usually 1.0)
     { "pt0",      0.10f,   0.0f },    //position tolerance [unit]
@@ -72,87 +72,88 @@ ConfigParam configParams[] = {
     { "p0",         0.0f,  0.0f },    //imposta la posizione del motore unico /solo per scopi di test
     { "zoff0",      0.0f,  0.0f },    //offset dello zero per gli encoder
 
-    { "spr1",   3200.0f,   0.0f },
-    { "kp1",       1.0f,   0.0f },
-    { "ki1",       0.0f,   0.0f },
-    { "kd1",       0.0f,   0.0f },
-    { "sm1",     120.0f,   0.0f },
-    { "am1",     300.0f,   0.0f },
-    { "jm1",      0.10f,   0.0f },    
-    { "ff1",      1.00f,   0.0f },    
-    { "pt1",      0.10f,   0.0f },    
-    { "vt1",      0.50f,   0.0f },    
-    { "il1",     200.0f,   0.0f },    
-    { "lmin1",   -90.0f,   0.0f },
-    { "lmax1",    90.0f,   0.0f },
-    { "p1",         0.0f,  0.0f },
-    { "zoff1",      0.0f,  0.0f },    
+    { "spr1", -14171.43f,   0.0f },    //J2 - 200 s/giro, trasmissione 28:62, microstepping 1/32, polarità neg. -->  -14171.43
+    { "kp1",        1.0f,   0.0f },    //corrente 0.67A
+    { "ki1",        0.0f,   0.0f },
+    { "kd1",        0.0f,   0.0f },
+    { "sm1",      120.0f,   0.0f },
+    { "am1",      300.0f,   0.0f },
+    { "jm1",       0.10f,   0.0f },    
+    { "ff1",       1.00f,   0.0f },    
+    { "pt1",       0.10f,   0.0f },    
+    { "vt1",       0.50f,   0.0f },    
+    { "il1",      200.0f,   0.0f },    
+    { "lmin1",    -90.0f,   0.0f },
+    { "lmax1",     90.0f,   0.0f },
+    { "p1",         0.0f,   0.0f },
+    { "zoff1",      0.0f,   0.0f },    
 
-    { "spr2",   3200.0f,   0.0f },    
-    { "kp2",       1.0f,   0.0f },
-    { "ki2",       0.0f,   0.0f },
-    { "kd2",       0.0f,   0.0f },
-    { "sm2",     120.0f,   0.0f },
-    { "am2",     300.0f,   0.0f },
-    { "jm2",      0.10f,   0.0f },    
-    { "ff2",      1.00f,   0.0f },    
-    { "pt2",      0.10f,   0.0f },    
-    { "vt2",      0.50f,   0.0f },    
-    { "il2",     200.0f,   0.0f },    
-    { "lmin2",   -90.0f,   0.0f },
-    { "lmax2",    90.0f,   0.0f },
-    { "p2",         0.0f,  0.0f },
-    { "zoff2",      0.0f,  0.0f },    
+    { "spr2", -12800.00f,   0.0f },    //J3 - 200 s/giro, trasmissione 19:38, microstepping 1/32, polarità neg. -->  -12800.00    
+    { "kp2",        1.0f,   0.0f },    //corrente 1.0A
 
-    { "spr3",   3200.0f,   0.0f },
-    { "kp3",       1.0f,   0.0f },
-    { "ki3",       0.0f,   0.0f },
-    { "kd3",       0.0f,   0.0f },
-    { "sm3",     120.0f,   0.0f },
-    { "am3",     300.0f,   0.0f },
-    { "jm3",      0.10f,   0.0f },    
-    { "ff3",      1.00f,   0.0f },    
-    { "pt3",      0.10f,   0.0f },    
-    { "vt3",      0.50f,   0.0f },    
-    { "il3",     200.0f,   0.0f },    
-    { "lmin3",   -90.0f,   0.0f },
-    { "lmax3",    90.0f,   0.0f },
-    { "p3",         0.0f,  0.0f },
-    { "zoff3",      0.0f,  0.0f },    
+    { "ki2",        0.0f,   0.0f },
+    { "kd2",        0.0f,   0.0f },
+    { "sm2",      120.0f,   0.0f },
+    { "am2",      300.0f,   0.0f },
+    { "jm2",       0.10f,   0.0f },    
+    { "ff2",       1.00f,   0.0f },    
+    { "pt2",       0.10f,   0.0f },    
+    { "vt2",       0.50f,   0.0f },    
+    { "il2",      200.0f,   0.0f },    
+    { "lmin2",    -90.0f,   0.0f },
+    { "lmax2",     90.0f,   0.0f },
+    { "p2",         0.0f,   0.0f },
+    { "zoff2",      0.0f,   0.0f },    
 
-    { "spr4",  -3200.0f,   0.0f },    
-    { "kp4",       1.0f,   0.0f },
-    { "ki4",       0.0f,   0.0f },
-    { "kd4",       0.0f,   0.0f },
-    { "sm4",     120.0f,   0.0f },
-    { "am4",     300.0f,   0.0f },
-    { "jm4",      0.10f,   0.0f },    
-    { "ff4",      1.00f,   0.0f },    
-    { "pt4",      0.10f,   0.0f },    
-    { "vt4",      0.50f,   0.0f },    
-    { "il4",     200.0f,   0.0f },    
-    { "lmin4",   -90.0f,   0.0f },
-    { "lmax4",    90.0f,   0.0f },
-    { "p4",         0.0f,  0.0f },
-    { "zoff4",      0.0f,  0.0f },    
+    { "spr3", -16800.00f,   0.0f },    //J4 - 200 s/giro, trasmissione 1:21, microstepping 1/4, polarità neg. -->  -16800.00  
+    { "kp3",        1.0f,   0.0f },    //corrente 1.5A
+    { "ki3",        0.0f,   0.0f },
+    { "kd3",        0.0f,   0.0f },
+    { "sm3",      120.0f,   0.0f },
+    { "am3",      300.0f,   0.0f },
+    { "jm3",       0.10f,   0.0f },    
+    { "ff3",       1.00f,   0.0f },    
+    { "pt3",       0.10f,   0.0f },    
+    { "vt3",       0.50f,   0.0f },    
+    { "il3",      200.0f,   0.0f },    
+    { "lmin3",    -90.0f,   0.0f },
+    { "lmax3",     90.0f,   0.0f },
+    { "p3",         0.0f,   0.0f },
+    { "zoff3",      0.0f,   0.0f },    
 
-    { "spr5",   3200.0f,   0.0f },    
-    { "kp5",       1.0f,   0.0f },
-    { "ki5",       0.0f,   0.0f },
-    { "kd5",       0.0f,   0.0f },
-    { "sm5",     120.0f,   0.0f },
-    { "am5",     300.0f,   0.0f },
-    { "jm5",      0.10f,   0.0f },    
-    { "ff5",      1.00f,   0.0f },    
-    { "pt5",      0.10f,   0.0f },    
-    { "vt5",      0.50f,   0.0f },    
-    { "il5",     200.0f,   0.0f },    
-    { "lmin5",   -90.0f,   0.0f },
-    { "lmax5",    90.0f,   0.0f },
-    { "p5",         0.0f,  0.0f },
-    { "zoff5",      0.0f,  0.0f },    
+    { "spr4", -16800.00f,   0.0f },    //J5 - 200 s/giro, trasmissione 1:21, microstepping 1/4, polarità neg. -->  -16800.00 
+    { "kp4",        1.0f,   0.0f },    //corrente 2.0A
+    { "ki4",        0.0f,   0.0f },
+    { "kd4",        0.0f,   0.0f },
+    { "sm4",      120.0f,   0.0f },
+    { "am4",      300.0f,   0.0f },
+    { "jm4",       0.10f,   0.0f },    
+    { "ff4",       1.00f,   0.0f },    
+    { "pt4",       0.10f,   0.0f },    
+    { "vt4",       0.50f,   0.0f },    
+    { "il4",      200.0f,   0.0f },    
+    { "lmin4",    -90.0f,   0.0f },
+    { "lmax4",     90.0f,   0.0f },
+    { "p4",         0.0f,   0.0f },
+    { "zoff4",      0.0f,   0.0f },    
 
-    { "ch",         0.0f,  0.0f },    //canale visualizzato/esportato
+    { "spr5", -10133.33f,   0.0f },    //J6 - 200 s/giro, trasmissione 24:76, microstepping 1/32, polarità neg. -->  -20266.67    
+    { "kp5",        1.0f,   0.0f },    //corrente 1.3A
+    { "ki5",        0.0f,   0.0f },
+    { "kd5",        0.0f,   0.0f },
+    { "sm5",      120.0f,   0.0f },
+    { "am5",      300.0f,   0.0f },
+    { "jm5",       0.10f,   0.0f },    
+    { "ff5",       1.00f,   0.0f },    
+    { "pt5",       0.10f,   0.0f },    
+    { "vt5",       0.50f,   0.0f },    
+    { "il5",      200.0f,   0.0f },    
+    { "lmin5",    -90.0f,   0.0f },
+    { "lmax5",     90.0f,   0.0f },
+    { "p5",         0.0f,   0.0f },
+    { "zoff5",      0.0f,   0.0f },    
+
+    { "ch",         0.0f,   0.0f },    //canale visualizzato/esportato
   };
 
 constexpr uint32_t CONFIG_VERSION = 4;
@@ -371,7 +372,6 @@ void setup()
         Serial.print(i);
         Serial.println(" disabilitato");      
     }
-    Serial1.println ("## *target, meas");
   }
 
   //inizializza i parametri e fissa la posizione attuale come setpoint
@@ -419,8 +419,8 @@ void setup()
   gcfg.v_default_rapid = 40.0f;
 
   pcfg.queue_max = gcfg.queue_max;
-  pcfg.prof_G1 = {120.0f, 0.050f}; // a_max, t_jerk
-  pcfg.prof_G0 = {240.0f, 0.030f};
+  pcfg.prof_G1 = {30.0f, 0.10f}; // a_max, t_jerk
+  pcfg.prof_G0 = {60.0f, 0.060f};
 
   ArmGCodeHooks hooks;
   hooks.get_motors_enabled = get_motors_enabled;
@@ -455,6 +455,10 @@ void loop()
   static uint64_t nextTick = 0;
 
   cfgConsole.update();
+  // 1) parse and enqueue commands
+  gcode.poll();
+  // 2) advance planner (start next move when previous is settled)
+  gcode.tickPlanner();
 
   handleButtons();
 
@@ -496,14 +500,17 @@ void loop()
 
     if (traceEnabled) {
       //Serial1.print ("## *T:");
-      Serial1.print ("## * ");
+      Serial1.print ("@ ");
       Serial1.print (joints.getTarget(ch));
       Serial1.print (",");
       //Serial1.print (" M:");
       Serial1.print (joints.getLastMeas(ch));
       Serial1.print (",");
       //Serial1.print (" C:");
-      Serial1.println (joints.lastCmd(ch));
+      Serial1.print (joints.lastCmd(ch));
+      Serial1.print (",");
+      //Serial1.print (" V:");
+      Serial1.println (joints.lastVel(ch));
     }
   }
   

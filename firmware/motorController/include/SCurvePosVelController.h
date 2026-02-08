@@ -308,13 +308,14 @@ public:
     _vel_f_tau = fmaxf(tau_s, 0.0f);   // 0 disables filtering
   }
 
-
   void disableDeadband() {
     _db_enabled = false;
     _db_active = false;
   }
 
   bool inDeadband() const { return _db_active; }
+
+  float getLastMeasuredVel() const { return _last_meas_vel; }
 
   bool isSettled() const {
     if (_fault_latched) return false;
