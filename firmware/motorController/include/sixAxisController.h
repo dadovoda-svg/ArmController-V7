@@ -60,7 +60,7 @@ public:
             
             _ctrl[i].setOutputMax(0.0f);
             _ctrl[i].setDeadband(0.18f, 0.35f, 0.8f);
-            _ctrl[i].setVelocityFilterTau(0.07f);            //0.05f adatto per 200Hz 0.03f adatto per 333Hz
+            _ctrl[i].setVelocityFilterTau(0.05f);            //0.05f adatto per 200Hz 0.03f adatto per 333Hz
 
             // le posizioni attuali corrispondono al setpoint
             _ctrl[i].reset(joints[i]);
@@ -112,7 +112,7 @@ public:
 
             _ctrl[i].setOutputMax(0.0f);
             _ctrl[i].setDeadband(0.18f, 0.35f, 0.8f);
-            _ctrl[i].setVelocityFilterTau(0.07f);           //0.05f adatto per 200Hz 0.03f adatto per 333Hz
+            _ctrl[i].setVelocityFilterTau(0.05f);           //0.05f adatto per 200Hz 0.03f adatto per 333Hz
         }
     }
     // ---------- Lifecycle ----------

@@ -109,6 +109,8 @@ public:
     _meas_vel_f = 0.0f;
     _last_meas_vel = 0.0f;
     _last_meas_pos = measured_pos;
+    _target_gen = 0;
+    _meas_gen   = 0;
 
     _last_us = micros();
   }
@@ -121,6 +123,9 @@ public:
     } else {
       _target = target_pos;
     }
+
+    _target_gen++;          // NEW: target changed
+    _db_active = false;     // consigliato: esci dalla deadband quando cambia target
   }
 
   float target() const { return _target; }
@@ -196,6 +201,7 @@ public:
     // Save last measurement for isSettled()
     _last_meas_pos = measured_pos;
     _last_meas_vel = meas_vel_used;
+    _meas_gen = _target_gen;      // NEW: we have a measurement for current target generation
 
     // ---- Deadband check (uses target vs measured) ----
     if (_db_enabled && !_fault_latched) {
@@ -320,6 +326,8 @@ public:
   bool isSettled() const {
     if (_fault_latched) return false;
 
+    if (_meas_gen != _target_gen) return false;   // NEW
+
     // Se la deadband è attiva, per definizione siamo "fermi a target"
     if (_db_enabled && _db_active) return true;
 
@@ -378,6 +386,9 @@ private:
   // last measurement (for isSettled)
   float _last_meas_pos = 0.0f;
   float _last_meas_vel = 0.0f;
+  uint32_t _target_gen = 0;
+  uint32_t _meas_gen   = 0;
+
 
   // filtered measured velocity (for D, deadband, isSettled)
   float _meas_vel_f = 0.0f;

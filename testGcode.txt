@@ -1,26 +1,10 @@
-# posizione ripiegata
-set p0 0.00
-set p1 -90.00
-set p2 0.00
-set p3 -90.00
-set p4 90.00
-set p5 0.00
+M17
+G28
+M115
+G1  J1=90.0 J2=-45.0 J3=0.0 J4=-45.0 j5=45 J6=0.0 V=30
+G1  J1=-90.0 J2=45.0 J3=0.0 J4=-45.0 j5=45 J6=0.0 V=30
+G1  J1=0.0 J2=0.0 J3=45.0 J4=-45.0 j5=45 J6=0.0 V=30
+G1  J1=45.0 J2=0.0 J3=-45.0 J4=-45.0 j5=45 J6=0.0 V=30
+G1  J1=0.0 J2=0.0 J3=-0.0 J4=-30.0 j5=45 J6=0.0 V=30
 
-# posizione test
-set p0 45.00
-set p1 45.00
-set p2 -10.00
-set p3 -45.00
-set p4 45.00
-set p5 -90.00
-
-M17 ; enable motors
-G28 ; homing
-M114 ; posizione attuale
-G1 J1=90.0 V=20.0
-G1 J1=90.0 V=360.0
-
-G1 J1=0.0 J2=0.0 J3=0.0 J4=-90.0 J5=90.0 J6=0.0 V=30 ; ripiegato
-
-G0 J1=0.0 J2=45.0 J3=0.0 J4=-45.0 j5=45 J6=5.0 V=40
-G0 J6=-10
+G1 J1=0.0 J2=-90.0 J3=0.0 J4=-90.0 J5=90.0 J6=0.0 V=30 ; ripiegato

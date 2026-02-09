@@ -105,7 +105,7 @@ ConfigParam configParams[] = {        //corrente 0.67A
     { "p2",         0.0f,   0.0f },
     { "zoff2",      0.0f,   0.0f },    
 
-    { "spr3", -16800.00f,   0.0f },    //J4 - 200 s/giro, trasmissione 1:21, microstepping 1/4, polarità neg. -->  -16800.00  
+    { "spr3",  -9600.00f,   0.0f },    //J4 - 200 s/giro, trasmissione 1:12, microstepping 1/4, polarità neg. -->  -9600.00  
     { "kp3",        1.0f,   0.0f },    //corrente 1.5A
     { "ki3",        0.0f,   0.0f },
     { "kd3",        0.0f,   0.0f },
@@ -174,8 +174,36 @@ uint8_t demoType = 0;
 
 static bool g_motors_enabled = false;
 static bool g_is_homed = false;
-ArmGCodeConfig gcfg;
-PlannerConfig pcfg;
+// --------------------
+// Config globali già valorizzati
+// --------------------
+const ArmGCodeConfig gcfg = []{
+  ArmGCodeConfig c;
+  c.line_max = 128;
+  c.queue_max = 16;
+  c.v_default = 30.0f;
+  c.v_default_rapid = 60.0f;
+  return c;
+}();
+
+const PlannerConfig pcfg = []{
+  PlannerConfig p;
+  p.queue_max = 16;
+
+  // PROFILI (quelli che vuoi davvero)
+  p.prof_G1 = PlannerProfile{30.0f, 0.050f}; // a_max, t_jerk
+  p.prof_G0 = PlannerProfile{60.0f, 0.030f};
+
+  // soglia delta
+  p.min_delta_deg = 0.001f;
+
+  // minimi anti-zero
+  p.min_v_deg_s   = 0.05f;
+  p.min_a_deg_s2  = 0.10f;
+
+  return p;
+}();
+
 ArmGCode gcode(gcfg, pcfg);
 
 // --- Required by planner ---
@@ -188,6 +216,7 @@ static float get_target_one(uint8_t joint) {
 }
 
 static void set_limits_one(uint8_t joint, float v_max, float a_max) {
+
   joints.setLimits (joint, v_max, a_max);      //vMax, aMax
 }
 
@@ -412,15 +441,7 @@ void setup()
 
   stopMotors();  // inizialmente fermi
 
-  // Planner init
-  // Tune planner profiles here
-  gcfg.queue_max = 16;
-  gcfg.v_default = 20.0f;
-  gcfg.v_default_rapid = 40.0f;
 
-  pcfg.queue_max = gcfg.queue_max;
-  pcfg.prof_G1 = {30.0f, 0.10f}; // a_max, t_jerk
-  pcfg.prof_G0 = {60.0f, 0.060f};
 
   ArmGCodeHooks hooks;
   hooks.get_motors_enabled = get_motors_enabled;

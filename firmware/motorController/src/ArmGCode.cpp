@@ -81,6 +81,9 @@ void PlannerCoordinator::startMove(const Move& m) {
     delta[i] = _cur.target_deg[i] - start;
     float d = fabsf(delta[i]);
     if (d > Dmax) Dmax = d;
+
+    // Serial1.printf ("## J%d old %4.1f new %4.1f D %4.1f", i+1, start, _cur.target_deg[i], delta[i]);
+    // Serial1.println (" - ");
   }
 
   if (Dmax < _cfg.min_delta_deg) {
@@ -108,7 +111,7 @@ void PlannerCoordinator::startMove(const Move& m) {
       float vi = f_max(_cfg.min_v_deg_s,  Vbase * r);
       float ai = f_max(_cfg.min_a_deg_s2, Abase * r);
 
-      Serial1.printf ("## J:%d Vm %4.1f Am %4.1f", i, vi, ai);
+      Serial1.printf ("## J%d Vm %4.1f Am %4.1f", i+1, vi, ai);
       Serial1.println (" - ");
 
       _hooks.set_limits_one((uint8_t)i, vi, ai);
@@ -319,8 +322,6 @@ bool ArmGCode::parseParams(const Tokens& tk, uint8_t start, Params& p) {
 }
 
 void ArmGCode::handleLine(char* line) {
-  //_io->print("rcv ");
-  //_io->println(line);
   if (strlen(line) >= _cfg.line_max) { sendErr("line_too_long"); return; }
 
   stripComment(line);
