@@ -33,3 +33,6 @@ Thumbs.db
 
 # --- KiCad backups
 ControllerV7.0-backups/
+
+# --- Kate backuo
+*.kate-swp

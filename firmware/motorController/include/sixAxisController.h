@@ -64,7 +64,7 @@ public:
 
             // le posizioni attuali corrispondono al setpoint
             _ctrl[i].reset(joints[i]);
-            _lastPos[i] = joints[i];
+            _lastPos[i] = joints[i];          
         }
     }
 

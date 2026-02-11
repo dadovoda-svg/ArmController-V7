@@ -30,6 +30,8 @@ void PlannerCoordinator::tick() {
   // Need at least these hooks to operate meaningfully
   if (!_hooks.set_target_all || !_hooks.get_target_one || !_hooks.is_settled_one) return;
 
+
+
   if (_executing) {
     if (moveSettled()) {
       _executing = false;
@@ -363,11 +365,27 @@ void ArmGCode::dispatch(const Cmd& cmd, const Params& p) {
     }
   }
 
+    // M400 pending gate: non bloccare il firmware, ma blocca i comandi "che cambiano stato"
+  if (_pending == PendingReply::M400) {
+    // Consenti query (debug) e comandi di emergenza/stop
+    if (cmd.isM(114) || cmd.isM(115) || cmd.isM(18) || cmd.isM(112)) {
+      // allowed
+    } else if (cmd.isM(400)) {
+      // già in attesa di un M400: rispondi busy (o puoi ignorare)
+      sendErr("busy");
+      return;
+    } else {
+      sendErr("busy");
+      return;
+    }
+  }
+
   if (cmd.isM(115)) { handle_M115(); return; }
   if (cmd.isM(114)) { handle_M114(); return; }
   if (cmd.isM(17))  { handle_M17();  return; }
   if (cmd.isM(18))  { handle_M18();  return; }
-  if (cmd.isM(400)) { handle_M400_blocking(); return; }
+  if (cmd.isM(400)) { handle_M400(); return; }
+  // if (cmd.isM(400)) { handle_M400_blocking(); return; }
   if (cmd.isM(112)) { handle_M112(); return; }
 
   if (cmd.isG(28))  { handle_G28(); return; }
@@ -406,31 +424,50 @@ void ArmGCode::handle_M17() {
 }
 
 void ArmGCode::handle_M18() {
+  _pending = PendingReply::None;   // cancella eventuale M400 in attesa
   _planner.stopImmediate();
   if (_hooks.set_motors_enabled) _hooks.set_motors_enabled(false);
   sendOk();
 }
 
-void ArmGCode::handle_M400_blocking() {
-  // Wait until planner idle (queue empty + current move settled)
-  // Keep calling planner.tick() here to ensure progress even if user doesn't call tickPlanner().
-  uint32_t lastKick = millis();
-  while (!_planner.isIdle()) {
-    _planner.tick();
-    delay(1); // ESP32 WDT-friendly
-
-    // optional: keep the loop from running too tight if something goes wrong
-    // (no time estimates, just a simple watchdog kick)
-    if (millis() - lastKick > 5000) {
-      lastKick = millis();
-      // you may emit a debug line:
-      // _io->println("## M400 waiting");
-    }
+void ArmGCode::handle_M400() {
+  // Se già in attesa di un M400, o lo ignori o rispondi busy:
+  if (_pending == PendingReply::M400) {
+    sendErr("busy");
+    return;
   }
-  sendOk();
+
+  // Se siamo già idle, possiamo rispondere subito
+  if (_planner.isIdle()) {   
+    sendOk();
+    return;
+  }
+
+  // Altrimenti: risposta differita. NON inviare ok qui.
+  _pending = PendingReply::M400;
 }
 
+// void ArmGCode::handle_M400_blocking() {
+//   // Wait until planner idle (queue empty + current move settled)
+//   // Keep calling planner.tick() here to ensure progress even if user doesn't call tickPlanner().
+//   uint32_t lastKick = millis();
+//   while (!_planner.isIdle()) {
+//     _planner.tick();
+//     delay(1); // ESP32 WDT-friendly
+
+//     // optional: keep the loop from running too tight if something goes wrong
+//     // (no time estimates, just a simple watchdog kick)
+//     if (millis() - lastKick > 5000) {
+//       lastKick = millis();
+//       // you may emit a debug line:
+//       // _io->println("## M400 waiting");
+//     }
+//   }
+//   sendOk();
+// }
+
 void ArmGCode::handle_M112() {
+  _pending = PendingReply::None;   // cancella eventuale M400 in attesa
   if (_hooks.estop_now) _hooks.estop_now();
   _planner.estop();
   if (_hooks.set_motors_enabled) _hooks.set_motors_enabled(false);

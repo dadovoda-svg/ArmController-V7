@@ -116,7 +116,19 @@ public:
   void poll();
 
   // Advance planner (call often, after poll())
-  void tickPlanner() { _planner.tick(); }
+  //void tickPlanner() { _planner.tick(); }
+  void tickPlanner() {
+    // 1) avanza planner/queue come fai già oggi
+    _planner.tick();
+
+    // 2) gestisci eventuale risposta differita
+    if (_pending == PendingReply::M400) {
+      if (_planner.isIdle()) {
+        _pending = PendingReply::None;
+        sendOk();
+      }
+    }
+  }
 
 private:
   Stream* _io = nullptr;
@@ -140,6 +152,10 @@ private:
   static void stripComment(char* s);
   static void trimInPlace(char* s);
   static bool parseFloatStrict(const char* s, float& out);
+
+  // Deferred replies (non-blocking M400)
+  enum class PendingReply : uint8_t { None, M400 };
+  PendingReply _pending = PendingReply::None;
 
   struct Tokens {
     const char* t[24];
@@ -179,7 +195,8 @@ private:
   void handle_M114();
   void handle_M17();
   void handle_M18();
-  void handle_M400_blocking();
+  void handle_M400();
+  // void handle_M400_blocking();
   void handle_M112();
 
   void handle_G28();

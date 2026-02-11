@@ -207,6 +207,10 @@ const PlannerConfig pcfg = []{
 ArmGCode gcode(gcfg, pcfg);
 
 // --- Required by planner ---
+static void control_loop (void) {
+  //esegue le funzioni minime per mantenere attivo il controllo
+}
+
 static void set_target_all(const float joints_deg[6]) {
   joints.setTarget ((float*)joints_deg);
 }
@@ -355,7 +359,6 @@ void setup()
   pinMode(0, OUTPUT);
   digitalWrite (0, false);
   // --- I2C ---
-  //Wire.setClock(400000UL);    // 400 kHz
   Wire.begin(I2C_SDA, I2C_SCL, 400000UL);
   
   // --- Display OLED ---
@@ -438,7 +441,6 @@ void setup()
       steppers.setStepsPerRevolution (i, -stepxRev);
     }
   }
-
   stopMotors();  // inizialmente fermi
 
 
@@ -478,8 +480,6 @@ void loop()
   cfgConsole.update();
   // 1) parse and enqueue commands
   gcode.poll();
-  // 2) advance planner (start next move when previous is settled)
-  gcode.tickPlanner();
 
   handleButtons();
 
@@ -491,29 +491,28 @@ void loop()
   //va richiamato con cadenza regolare
   if (timeNow >= nextPID) {
     nextPID = timeNow + (uint64_t)PID_PERIOD_uS;
-    digitalWrite (2, true);
+    gcode.tickPlanner();
     joints.update();
-    digitalWrite (2, false);
   }
-  if (timeNow >= nextTick) {
-    nextTick = timeNow + (uint64_t)PID_PERIOD_uS;
 
-    if (motorsRunning) {
-      switch (demoType) {
-        case 0:
-          joints.setTarget (ch, 90.0 * sin( millis() * 0.0001 ));
-          break;
-        case 1:
-          joints.setTarget (ch, 90.0 * sin( millis() * 0.00025 ));
-          break;
-        case 2:
-          joints.setTarget (ch, 90.0 * sin( millis() * 0.0005 ));
-          break;
-        case 3:
-          joints.setTarget (ch, -90.0 + 9.0 * int((millis()%60000)/3000.0));
-          break;
-      }
-    }
+  if (timeNow >= nextTick) {
+    nextTick = timeNow + (uint64_t)TICK_PERIOD_uS;
+    // if (motorsRunning) {
+    //   switch (demoType) {
+    //     case 0:
+    //       joints.setTarget (ch, 90.0 * sin( millis() * 0.0001 ));
+    //       break;
+    //     case 1:
+    //       joints.setTarget (ch, 90.0 * sin( millis() * 0.00025 ));
+    //       break;
+    //     case 2:
+    //       joints.setTarget (ch, 90.0 * sin( millis() * 0.0005 ));
+    //       break;
+    //     case 3:
+    //       joints.setTarget (ch, -90.0 + 9.0 * int((millis()%60000)/3000.0));
+    //       break;
+    //   }
+    // }
     
     if (displayEnabled) {
       updateDisplay();
@@ -534,7 +533,6 @@ void loop()
       Serial1.println (joints.lastVel(ch));
     }
   }
-  
 }
 
 // =========================
