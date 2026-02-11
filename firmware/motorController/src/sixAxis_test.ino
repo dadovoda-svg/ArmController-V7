@@ -9,7 +9,8 @@
 #include "ConfigStore.h"
 #include "ConfigConsole.h"
 #include "sixAxisController.h"
-#include "ArmGCode.h"
+// #include "ArmGCode.h"
+#include "ArmGCode_blend.h"
 
 // =========================
 // Configurazione i2c
@@ -57,106 +58,107 @@ const uint32_t  TICK_PERIOD_uS = 20000;
 // Definizione parametri
 ConfigParam configParams[] = {        //corrente 0.67A
     { "spr0",  6400.00f,   0.0f },    //J1 - 200 s/giro, trasmissione 1:1, microstepping 1/32, polarità pos. -->  6400.00
-    { "kp0",       2.0f,   0.0f },    //pid Propotional
-    { "ki0",       0.1f,   0.0f },    //pid Integral
+    { "kp0",      10.0f,   0.0f },    //pid Propotional
+    { "ki0",       0.9f,   0.0f },    //pid Integral
     { "kd0",       0.0f,   0.0f },    //pid Differential
     { "sm0",      90.0f,   0.0f },    //velocità massima in gradi al secondo
-    { "am0",      90.0f,   0.0f },    //accelerazione massima in gradi al secondo quadrato
+    { "am0",     180.0f,   0.0f },    //accelerazione massima in gradi al secondo quadrato
     { "jm0",      0.10f,   0.0f },    //t_jerk (S-curve time): 0,10 s → jerk = a_max / t_jerk = 3000 deg/s³
     { "ff0",      1.00f,   0.0f },    //feed-forward multiplier for profile velocity (usually 1.0)
-    { "pt0",      0.10f,   0.0f },    //position tolerance [unit]
-    { "vt0",      0.50f,   0.0f },    //velocity tolerance [unit]
+    { "pt0",      1.80f,   0.0f },    //position tolerance [unit]
+    { "vt0",      2.00f,   0.0f },    //velocity tolerance [unit]
     { "il0",     200.0f,   0.0f },    //integrator limit
-    { "lmin0",   -90.0f,   0.0f },    //position limit min
-    { "lmax0",    90.0f,   0.0f },    //position limit max
-    { "p0",         0.0f,  0.0f },    //imposta la posizione del motore unico /solo per scopi di test
-    { "zoff0",      0.0f,  0.0f },    //offset dello zero per gli encoder
+    { "lmin0",  -175.0f,   0.0f },    //position limit min
+    { "lmax0",   175.0f,   0.0f },    //position limit max
+    { "p0",        0.0f,   0.0f },    //imposta la posizione del motore unico /solo per scopi di test
+    { "zoff0",  181.50f,   0.0f },    //offset dello zero per gli encoder
 
     { "spr1", -14171.43f,   0.0f },    //J2 - 200 s/giro, trasmissione 28:62, microstepping 1/32, polarità neg. -->  -14171.43
-    { "kp1",        1.0f,   0.0f },    //corrente 0.67A
+    { "kp1",       15.0f,   0.0f },    //corrente 0.67A
     { "ki1",        0.0f,   0.0f },
     { "kd1",        0.0f,   0.0f },
-    { "sm1",      120.0f,   0.0f },
-    { "am1",      300.0f,   0.0f },
+    { "sm1",      90.0f,   0.0f },
+    { "am1",      180.0f,   0.0f },
     { "jm1",       0.10f,   0.0f },    
     { "ff1",       1.00f,   0.0f },    
-    { "pt1",       0.10f,   0.0f },    
-    { "vt1",       0.50f,   0.0f },    
+    { "pt1",       1.80f,   0.0f },    
+    { "vt1",       2.00f,   0.0f },    
     { "il1",      200.0f,   0.0f },    
-    { "lmin1",    -90.0f,   0.0f },
-    { "lmax1",     90.0f,   0.0f },
+    { "lmin1",    -110.0f,   0.0f },
+    { "lmax1",     110.0f,   0.0f },
     { "p1",         0.0f,   0.0f },
-    { "zoff1",      0.0f,   0.0f },    
+    { "zoff1",      184.8f,   0.0f },    
 
     { "spr2", -12800.00f,   0.0f },    //J3 - 200 s/giro, trasmissione 19:38, microstepping 1/32, polarità neg. -->  -12800.00    
-    { "kp2",        1.0f,   0.0f },    //corrente 1.0A
+    { "kp2",        15.0f,   0.0f },    //corrente 1.0A
 
-    { "ki2",        0.0f,   0.0f },
+    { "ki2",        1.0f,   0.0f },
     { "kd2",        0.0f,   0.0f },
-    { "sm2",      120.0f,   0.0f },
-    { "am2",      300.0f,   0.0f },
+    { "sm2",      90.0f,   0.0f },
+    { "am2",      180.0f,   0.0f },
     { "jm2",       0.10f,   0.0f },    
     { "ff2",       1.00f,   0.0f },    
-    { "pt2",       0.10f,   0.0f },    
-    { "vt2",       0.50f,   0.0f },    
+    { "pt2",       1.80f,   0.0f },    
+    { "vt2",       2.00f,   0.0f },    
     { "il2",      200.0f,   0.0f },    
-    { "lmin2",    -90.0f,   0.0f },
-    { "lmax2",     90.0f,   0.0f },
+    { "lmin2",    -130.0f,   0.0f },
+    { "lmax2",     130.0f,   0.0f },
     { "p2",         0.0f,   0.0f },
-    { "zoff2",      0.0f,   0.0f },    
+    { "zoff2",      188.50f,   0.0f },    
 
-    { "spr3",  -9600.00f,   0.0f },    //J4 - 200 s/giro, trasmissione 1:12, microstepping 1/4, polarità neg. -->  -9600.00  
-    { "kp3",        1.0f,   0.0f },    //corrente 1.5A
-    { "ki3",        0.0f,   0.0f },
+    { "spr3", -20800.00f,   0.0f },    //J4 - 200 s/giro, trasmissione 1:13, microstepping 1/8, polarità neg. -->  -10400.00  
+    { "kp3",        3.0f,   0.0f },    //corrente 1.5A
+    { "ki3",        0.5f,   0.0f },
     { "kd3",        0.0f,   0.0f },
-    { "sm3",      120.0f,   0.0f },
-    { "am3",      300.0f,   0.0f },
+    { "sm3",      90.0f,   0.0f },
+    { "am3",      180.0f,   0.0f },
     { "jm3",       0.10f,   0.0f },    
     { "ff3",       1.00f,   0.0f },    
-    { "pt3",       0.10f,   0.0f },    
-    { "vt3",       0.50f,   0.0f },    
+    { "pt3",       1.80f,   0.0f },    
+    { "vt3",       2.00f,   0.0f },    
     { "il3",      200.0f,   0.0f },    
-    { "lmin3",    -90.0f,   0.0f },
-    { "lmax3",     90.0f,   0.0f },
+    { "lmin3",    -92.0f,   0.0f },
+    { "lmax3",    100.0f,   0.0f },
     { "p3",         0.0f,   0.0f },
-    { "zoff3",      0.0f,   0.0f },    
+    { "zoff3",      180.80f,   0.0f },    
 
-    { "spr4", -16800.00f,   0.0f },    //J5 - 200 s/giro, trasmissione 1:21, microstepping 1/4, polarità neg. -->  -16800.00 
-    { "kp4",        1.0f,   0.0f },    //corrente 2.0A
-    { "ki4",        0.0f,   0.0f },
+    { "spr4",  33600.00f,   0.0f },    //J5 - 200 s/giro, trasmissione 1:21, microstepping 1/8, polarità os. -->  33600.00 
+    { "kp4",        3.0f,   0.0f },    //corrente 2.0A
+    { "ki4",        1.0f,   0.0f },
     { "kd4",        0.0f,   0.0f },
-    { "sm4",      120.0f,   0.0f },
-    { "am4",      300.0f,   0.0f },
+    { "sm4",      40.0f,   0.0f },
+    { "am4",      40.0f,   0.0f },
     { "jm4",       0.10f,   0.0f },    
     { "ff4",       1.00f,   0.0f },    
-    { "pt4",       0.10f,   0.0f },    
-    { "vt4",       0.50f,   0.0f },    
+    { "pt4",       1.80f,   0.0f },    
+    { "vt4",       2.00f,   0.0f },    
     { "il4",      200.0f,   0.0f },    
-    { "lmin4",    -90.0f,   0.0f },
-    { "lmax4",     90.0f,   0.0f },
+    { "lmin4",    -91.0f,   0.0f },
+    { "lmax4",     91.0f,   0.0f },
     { "p4",         0.0f,   0.0f },
-    { "zoff4",      0.0f,   0.0f },    
+    { "zoff4",      178.0f,   0.0f },    
 
-    { "spr5", -10133.33f,   0.0f },    //J6 - 200 s/giro, trasmissione 24:76, microstepping 1/32, polarità neg. -->  -20266.67    
-    { "kp5",        1.0f,   0.0f },    //corrente 1.3A
-    { "ki5",        0.0f,   0.0f },
+    { "spr5", -20266.66f,   0.0f },    //J6 - 200 s/giro, trasmissione 24:76, microstepping 1/32, polarità neg. -->  -20266.67    
+    { "kp5",        5.0f,   0.0f },    //corrente 1.3A
+    { "ki5",        1.0f,   0.0f },
     { "kd5",        0.0f,   0.0f },
-    { "sm5",      120.0f,   0.0f },
-    { "am5",      300.0f,   0.0f },
+    { "sm5",      40.0f,   0.0f },
+    { "am5",      40.0f,   0.0f },
     { "jm5",       0.10f,   0.0f },    
     { "ff5",       1.00f,   0.0f },    
-    { "pt5",       0.10f,   0.0f },    
-    { "vt5",       0.50f,   0.0f },    
+    { "pt5",       1.8f,   0.0f },    
+    { "vt5",       2.0f,   0.0f },    
     { "il5",      200.0f,   0.0f },    
-    { "lmin5",    -90.0f,   0.0f },
-    { "lmax5",     90.0f,   0.0f },
+    { "lmin5",    -91.0f,   0.0f },
+    { "lmax5",     91.0f,   0.0f },
     { "p5",         0.0f,   0.0f },
-    { "zoff5",      0.0f,   0.0f },    
+    { "zoff5",      183.0f,   0.0f },    
 
-    { "ch",         0.0f,   0.0f },    //canale visualizzato/esportato
+    { "chd",         0.0f,   0.0f },    //canale visualizzato sul display
+    { "cht",         0.0f,   0.0f },    //canale visualizzato esportato in trace
   };
 
-constexpr uint32_t CONFIG_VERSION = 4;
+constexpr uint32_t CONFIG_VERSION = 7;
 
 ConfigStore   config("myapp_cfg",
                      configParams,
@@ -167,7 +169,8 @@ ConfigConsole cfgConsole(config, Serial);
 
 // Flag che segnala che la config è stata modificata
 volatile bool configChanged = false;
-int  currentEncoderChannel  = 0;     // canale encoder visualizzato (0..5)
+int  currentEncoderChannelDisplay  = 0;     // canale encoder visualizzato (0..5)
+int  currentEncoderChannelTrace  = 0;       // canale encoder tracciato (0..5)
 bool traceEnabled = false;
 bool displayEnabled = false;
 uint8_t demoType = 0;
@@ -219,8 +222,15 @@ static float get_target_one(uint8_t joint) {
   return joints.getTarget (joint);
 }
 
-static void set_limits_one(uint8_t joint, float v_max, float a_max) {
+static float get_ref_pos_one(uint8_t joint) {
+  return joints.refPos (joint);
+}
 
+static float get_ref_vel_one(uint8_t joint) {
+  return joints.refVel (joint);
+}
+
+static void set_limits_one(uint8_t joint, float v_max, float a_max) {
   joints.setLimits (joint, v_max, a_max);      //vMax, aMax
 }
 
@@ -257,8 +267,8 @@ void onConfigChanged(void* userData, const char* key, float oldVal, float newVal
 {
   // userData è opzionale; qui lo ignoriamo
   (void)userData;
-
-  Serial.print("[CONFIG] ");uint8_t ch = (uint8_t)currentEncoderChannel;
+  
+  Serial.print("[CONFIG] ");
   Serial.print(key);
   Serial.print(" cambiato da ");
   Serial.print(oldVal, 6);
@@ -268,20 +278,24 @@ void onConfigChanged(void* userData, const char* key, float oldVal, float newVal
   // Imposta un flag globale, che il loop() potrà usare
   configChanged = true;
 
-  if (strcmp(key, "ch") == 0) //i canali vanno da 1 a 6
+  if (strcmp(key, "chd") == 0) //i canali vanno da 1 a 6
+  {
+    if (newVal == 0) {    //se ch = 0 disabilito anche il display
+      displayEnabled = false;
+    }
+    else {  //se maggiore di zero abilito il trave
+      displayEnabled = true;
+      currentEncoderChannelDisplay = ((int) newVal) - 1;
+    }
+  }
+  else if (strcmp(key, "cht") == 0) //i canali vanno da 1 a 6
   {
     if (newVal == 0) {    //se ch = 0 disabilito anche il display
       traceEnabled = false;
-      displayEnabled = false;
-    }
-    else if (newVal < 0) {  //se minore di zero disabilito il trace e abilito il display
-      traceEnabled = false;      
-      displayEnabled = true;
-      currentEncoderChannel = ((int) (-newVal)) - 1;
     }
     else {  //se maggiore di zero abilito il trave
       traceEnabled = true;
-      currentEncoderChannel = ((int) newVal) - 1;
+      currentEncoderChannelTrace = ((int) newVal) - 1;
     }
   }
   else if (   strcmp(key, "p0") == 0
@@ -303,6 +317,20 @@ void onConfigChanged(void* userData, const char* key, float oldVal, float newVal
     for (uint8_t i = 0; i < AS5600Mux::NUM_ENCODERS; ++i) {
       szName[4] = '0' + i;
       encoders.setZeroOffsetDegrees (i, config.get(szName));
+    }
+    strcpy (szName, "spr0");
+    for (uint8_t i=0; i < sixAxisController::NUM_JOINTS; ++i) {
+      szName[3] = '0' + i;
+      float stepxRev = config.get(szName);
+      if (stepxRev > 0.0f)
+      {
+        steppers.setDirectionPolarity (i, false);
+        steppers.setStepsPerRevolution (i, stepxRev);
+      }
+      else {
+        steppers.setDirectionPolarity (i, true);
+        steppers.setStepsPerRevolution (i, -stepxRev);
+      }
     }
   }
 }
@@ -410,19 +438,22 @@ void setup()
   //in modo che i motori non si muovano
   joints.loadParams(config, resetJoints);
 
-  float newVal = config.get("ch");
+  float newVal = config.get("chd");
   if (newVal == 0) {    //se ch = 0 disabilito anche il display
-    traceEnabled = false;
     displayEnabled = false;
   }
-  else if (newVal < 0) {  //se minore di zero disabilito il trace e abilito il display
-    traceEnabled = false;
+  else {  //se maggiore di zero abilito il trave
     displayEnabled = true;
-    currentEncoderChannel = ((int) (-newVal)) - 1;
+    currentEncoderChannelDisplay = ((int) newVal) - 1;
+  }
+
+  newVal = config.get("cht");
+  if (newVal == 0) {    //se ch = 0 disabilito anche il display
+    traceEnabled = false;
   }
   else {  //se maggiore di zero abilito il trave
     traceEnabled = true;
-    currentEncoderChannel = ((int) newVal) - 1;
+    currentEncoderChannelTrace = ((int) newVal) - 1;
   }
 
   // --- Motori ---
@@ -454,6 +485,8 @@ void setup()
 
   hooks.set_target_all = set_target_all;
   hooks.get_target_one = get_target_one;
+  hooks.get_ref_pos_one = get_ref_pos_one;
+  hooks.get_ref_vel_one = get_ref_vel_one;
 
   hooks.set_limits_one = set_limits_one;
   hooks.set_scurve_time_one = set_scurve_time_one;
@@ -487,7 +520,8 @@ void loop()
 
   //steppers.setSpeedDegPerSec (3, 20.0);
 
-  uint8_t ch = (uint8_t)currentEncoderChannel;
+  //uint8_t chd = (uint8_t)currentEncoderChannelDisplay;
+  uint8_t cht = (uint8_t)currentEncoderChannelTrace;
   //va richiamato con cadenza regolare
   if (timeNow >= nextPID) {
     nextPID = timeNow + (uint64_t)PID_PERIOD_uS;
@@ -497,22 +531,6 @@ void loop()
 
   if (timeNow >= nextTick) {
     nextTick = timeNow + (uint64_t)TICK_PERIOD_uS;
-    // if (motorsRunning) {
-    //   switch (demoType) {
-    //     case 0:
-    //       joints.setTarget (ch, 90.0 * sin( millis() * 0.0001 ));
-    //       break;
-    //     case 1:
-    //       joints.setTarget (ch, 90.0 * sin( millis() * 0.00025 ));
-    //       break;
-    //     case 2:
-    //       joints.setTarget (ch, 90.0 * sin( millis() * 0.0005 ));
-    //       break;
-    //     case 3:
-    //       joints.setTarget (ch, -90.0 + 9.0 * int((millis()%60000)/3000.0));
-    //       break;
-    //   }
-    // }
     
     if (displayEnabled) {
       updateDisplay();
@@ -521,16 +539,16 @@ void loop()
     if (traceEnabled) {
       //Serial1.print ("## *T:");
       Serial1.print ("@ ");
-      Serial1.print (joints.getTarget(ch));
+      Serial1.print (joints.getTarget(cht));
       Serial1.print (",");
       //Serial1.print (" M:");
-      Serial1.print (joints.getLastMeas(ch));
+      Serial1.print (joints.getLastMeas(cht));
       Serial1.print (",");
       //Serial1.print (" C:");
-      Serial1.print (joints.lastCmd(ch));
+      Serial1.print (joints.lastCmd(cht));
       Serial1.print (",");
       //Serial1.print (" V:");
-      Serial1.println (joints.lastVel(ch));
+      Serial1.println (joints.lastVel(cht));
     }
   }
 }
@@ -620,12 +638,6 @@ void handleButtonChannel(bool reading)
 
       // fronte di discesa: pulsante premuto (INPUT_PULLUP)
       if (lastBtn2Stable == LOW) {
-        //currentEncoderChannel++;
-        if (currentEncoderChannel >= AS5600Mux::NUM_ENCODERS) {
-          currentEncoderChannel = 0;
-        }
-        Serial.print("Canale encoder selezionato: ");
-        Serial.println(currentEncoderChannel);
       }
     }
   }
@@ -661,7 +673,7 @@ void updateDisplay()
   }
   lastUpdateMs = millis();
 
-  uint8_t ch = (uint8_t)currentEncoderChannel;
+  uint8_t ch = (uint8_t)currentEncoderChannelDisplay;
 
   // Lettura registri fondamentali AS5600 per canale corrente
   uint16_t rawAngle = 0;
@@ -687,7 +699,7 @@ void updateDisplay()
   display.setTextSize(1);
 
   display.print("Six-axis Test  Ch:");
-  display.println(ch);
+  display.println(ch+1);
 
   // Stato motori
   display.print("Motors: ");

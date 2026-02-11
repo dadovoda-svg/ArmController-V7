@@ -8,7 +8,7 @@ public:
     float v_max = 0.0f;     // [deg/s]
     float a_max = 0.0f;     // [deg/s^2]
     float j_max = 0.0f;     // [deg/s^3]
-    float out_max = 0.0f;   // [deg/s] clamp finale (default = v_max)
+    float out_max = -1.0f;   // [deg/s] clamp finale (default = v_max)
   };
 
   struct Gains {
@@ -35,7 +35,9 @@ public:
   void setLimits(float v_max, float a_max) {
     _lim.v_max = fabsf(v_max);
     _lim.a_max = fabsf(a_max);
-    if (_lim.out_max <= 0.0f) _lim.out_max = _lim.v_max;
+    if (_out_auto) _lim.out_max = _lim.v_max;
+    Serial1.printf ("## SetLimit Vm %4.1f Am %4.1f", _lim.v_max, _lim.a_max);
+    Serial1.println ();
   }
 
   // S-curve smoothing time (seconds): accel ramps 0->Amax in t_jerk
@@ -46,7 +48,20 @@ public:
 
   void setJerkMax(float j_max) { _lim.j_max = fabsf(j_max); }
 
-  void setOutputMax(float out_max) { _lim.out_max = fabsf(out_max); }
+  void setOutputMax(float out_max) {
+    Serial1.printf ("## SetOutVMax %4.1f ", out_max);
+    Serial1.println ();
+    if (out_max <= 0.0f) { 
+      _out_auto = true;  
+      _lim.out_max = 0.0f; 
+    }
+    else { 
+      _out_auto = false; 
+      _lim.out_max = fabsf(out_max); 
+    }
+  }
+
+  //void setOutputMax(float out_max) { _lim.out_max = fabsf(out_max); }
 
   void setGains(float kp, float ki, float kd, float ff_vel = 1.0f) {
     _g.kp = kp; _g.ki = ki; _g.kd = kd; _g.ff_vel = ff_vel;
@@ -273,6 +288,8 @@ public:
     const float p = _g.kp * err;
     float v_cmd = (_g.ff_vel * _ref_vel) + p + _i_term + d;
 
+    //Serial1.printf (" cmd %4.1f ", v_cmd);
+
     // 5) Output clamp
     const float out_lim = (_lim.out_max > 0.0f) ? _lim.out_max : _lim.v_max;
     if (out_lim > 0.0f) {
@@ -283,6 +300,9 @@ public:
       }
       v_cmd = v_sat;
     }
+
+    //Serial1.printf (" clamp %4.1f ", v_cmd);
+    //Serial1.println ();
 
     // 6) Soft-stop near hard limits: forbid commands that push outward.
     // This is prevention; the "must not exceed" is enforced by the HARD CHECK above.
@@ -347,6 +367,8 @@ private:
   Limits _lim{};
   Gains _g{};
   Tolerances _tol{};
+
+  bool _out_auto = true;
 
   float _target = 0.0f;
 

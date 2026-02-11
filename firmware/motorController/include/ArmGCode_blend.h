@@ -61,6 +61,11 @@ struct ArmGCodeHooks {
   void (*set_target_one)(uint8_t joint, float pos_deg) = nullptr; // optional alternative
   float (*get_target_one)(uint8_t joint) = nullptr;
 
+  // Optional: reference state (preferred for smooth segment blending)
+  float (*get_ref_pos_one)(uint8_t joint) = nullptr;
+  float (*get_ref_vel_one)(uint8_t joint) = nullptr;
+
+
   // Per-joint limits for coordinated moves
   void (*set_limits_one)(uint8_t joint, float v_max_deg_s, float a_max_deg_s2) = nullptr;
   void (*set_scurve_time_one)(uint8_t joint, float t_jerk_s) = nullptr;
@@ -98,11 +103,23 @@ private:
   Move _cur{};
   uint8_t _moving_mask = 0;
 
+  // Cached per-joint limits from last coordinated setup (used for blending heuristics)
+  float _vmax_deg_s[6]  = {0,0,0,0,0,0};
+  float _amax_deg_s2[6] = {0,0,0,0,0,0};
+
+  // Blending control
+  bool  _blend_enabled = true;
+  float _blend_k_brake = 1.6f;     // how early we switch vs estimated braking distance
+  float _blend_min_rem = 0.25f;    // deg: minimum remaining window to allow switch
+
+
   bool queuePush(const Move& m);
   bool queuePop(Move& out);
+  bool queuePeek(Move& out) const;
 
   void startMove(const Move& m);
   bool moveSettled() const;
+  bool shouldBlendToNext(const Move& next) const;
 };
 
 class ArmGCode {

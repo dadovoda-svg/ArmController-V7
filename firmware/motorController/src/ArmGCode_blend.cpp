@@ -1,4 +1,4 @@
-#include "ArmGCode.h"
+#include "ArmGCode_blend.h"
 #include <math.h>   // isfinite, fabsf
 
 // ----------------------
@@ -30,9 +30,23 @@ void PlannerCoordinator::tick() {
   // Need at least these hooks to operate meaningfully
   if (!_hooks.set_target_all || !_hooks.get_target_one || !_hooks.is_settled_one) return;
 
-
-
   if (_executing) {
+    // Optional: segment blending (avoid stop-and-go on micro-segments)
+    if (_blend_enabled && _hooks.get_ref_pos_one && _hooks.get_ref_vel_one && _hooks.set_limits_one) {
+      Move next;
+      if (queuePeek(next)) {
+        // Blend only between same move type (G1->G1, G0->G0)
+        if (next.type == _cur.type) {
+          if (shouldBlendToNext(next)) {
+            // consume next and immediately retarget while keeping motion continuous
+            Move m2;
+            if (queuePop(m2)) startMove(m2);
+            return;
+          }
+        }
+      }
+    }
+
     if (moveSettled()) {
       _executing = false;
       _moving_mask = 0;
@@ -72,14 +86,26 @@ bool PlannerCoordinator::queuePop(Move& out) {
   return true;
 }
 
+bool PlannerCoordinator::queuePeek(Move& out) const {
+  if (_qCount == 0) return false;
+  out = _q[_qHead];
+  return true;
+}
+
+
 void PlannerCoordinator::startMove(const Move& m) {
   _cur = m;
 
-  // Compute deltas using current TARGET as start (safe because we only start next when settled)
+  // Compute deltas using a dynamic start:
+  // - if we are already executing (blending), use current reference position
+  // - otherwise use current TARGET (safe when starting from idle)
   float delta[6];
   float Dmax = 0.0f;
   for (int i = 0; i < 6; i++) {
-    float start = _hooks.get_target_one((uint8_t)i);
+    float start = _hooks.get_ref_pos_one ? _hooks.get_ref_pos_one(i)
+                                        : _hooks.get_target_one(i);
+//    float start = _hooks.get_target_one((uint8_t)i);
+    if (_executing && _hooks.get_ref_pos_one) start = _hooks.get_ref_pos_one((uint8_t)i);
     delta[i] = _cur.target_deg[i] - start;
     float d = fabsf(delta[i]);
     if (d > Dmax) Dmax = d;
@@ -116,6 +142,8 @@ void PlannerCoordinator::startMove(const Move& m) {
       Serial1.printf ("## J%d Vm %4.1f Am %4.1f", i+1, vi, ai);
       Serial1.println (" - ");
 
+      _vmax_deg_s[i]  = vi;
+      _amax_deg_s2[i] = ai;
       _hooks.set_limits_one((uint8_t)i, vi, ai);
       _hooks.set_scurve_time_one((uint8_t)i, Tj);
       _moving_mask |= (1u << i);
@@ -124,7 +152,11 @@ void PlannerCoordinator::startMove(const Move& m) {
     // If limits APIs are missing, we still can run, just uncoordinated.
     // Consider this acceptable; internal controllers will use their last configured limits.
     for (int i = 0; i < 6; i++) {
-      if (fabsf(delta[i]) >= _cfg.min_delta_deg) _moving_mask |= (1u << i);
+      if (fabsf(delta[i]) >= _cfg.min_delta_deg) {
+        _vmax_deg_s[i]  = 0.0f;
+        _amax_deg_s2[i] = 0.0f;
+        _moving_mask |= (1u << i);
+      }
     }
   }
 
@@ -140,6 +172,46 @@ bool PlannerCoordinator::moveSettled() const {
     if (!(_moving_mask & (1u << i))) continue;
     if (!_hooks.is_settled_one((uint8_t)i)) return false;
   }
+  return true;
+}
+
+
+bool PlannerCoordinator::shouldBlendToNext(const Move& next) const {
+  // Preconditions: ref hooks + cached limits must be available
+  // Heuristic: switch to next target when remaining distance is within a multiple
+  // of the estimated braking distance. This prevents the controller from starting
+  // to decelerate hard toward intermediate waypoints.
+  float worst_margin = 0.0f;
+
+  for (int i = 0; i < 6; i++) {
+    // Consider joints that are moving in current segment OR will move in next
+    const bool curMoves  = (_moving_mask & (1u << i)) != 0;
+    const bool nextMoves = (next.changed_mask & (1u << i)) != 0;
+    if (!curMoves && !nextMoves) continue;
+
+    const float pos = _hooks.get_ref_pos_one((uint8_t)i);
+    const float vel = fabsf(_hooks.get_ref_vel_one((uint8_t)i));
+    const float tgt = _cur.target_deg[i];
+
+    const float rem = fabsf(tgt - pos);
+
+    // Need a meaningful accel limit for this joint to estimate braking distance
+    const float a = _amax_deg_s2[i];
+    if (a <= 1e-6f) return false;
+
+    const float d_brake = (vel * vel) / (2.0f * a); // deg
+    const float window  = f_max(_blend_min_rem, _blend_k_brake * d_brake);
+
+    // If any joint still has too much remaining, do not blend yet
+    if (rem > window) return false;
+
+    // Track margin for potential tuning/telemetry (optional)
+    const float margin = window - rem;
+    if (margin > worst_margin) worst_margin = margin;
+  }
+
+  // Extra safety: if current segment is extremely tiny, avoid thrashing
+  // (still allows blending if ref is already very close)
   return true;
 }
 

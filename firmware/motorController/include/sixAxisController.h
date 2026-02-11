@@ -115,6 +115,7 @@ public:
             _ctrl[i].setVelocityFilterTau(0.05f);           //0.05f adatto per 200Hz 0.03f adatto per 333Hz
         }
     }
+    
     // ---------- Lifecycle ----------
     // Call once after you know your initial measured position.
     void reset(void) {
@@ -142,10 +143,14 @@ public:
                 _ctrl[i].setTarget(pos);
                 _lastPos[i] = pos;
             }
+            //Serial1.printf ("## Motor %d ", i);
             float vcmd = _ctrl[i].update(pos);      // dt da micros()
             _lastVel[i] = vcmd;
             _steppers.setSpeedDegPerSec (i, vcmd);
-
+            // if (i == 4) {
+            //     Serial1.printf ("## Motor %d speed %4.1f", i, vcmd);
+            //     Serial1.println (" ->");
+            // }
             //TODO: gestire correttamente un eventaule fault. per ora mi limito a ripulirlo e a segnalarlo sopra
             if (_ctrl[i].fault()) {
                 fault = true;

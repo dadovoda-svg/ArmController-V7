@@ -157,6 +157,11 @@ void MultiStepper6::setSpeed(uint8_t motorIndex, float speedStepsPerSec) {
   computeStepInterval(m);
 
   portEXIT_CRITICAL(&s_timerMux);
+  // if (motorIndex == 4) {
+  //     Serial1.printf ("## Motor %d dir %d pol %d", motorIndex, m.direction, m.dirPolarity);
+  //     Serial1.println (" ->");
+  // }
+
 }
 
 float MultiStepper6::getSpeed(uint8_t motorIndex) const
