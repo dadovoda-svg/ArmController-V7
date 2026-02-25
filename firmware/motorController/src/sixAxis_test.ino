@@ -194,8 +194,8 @@ const PlannerConfig pcfg = []{
   p.queue_max = 16;
 
   // PROFILI (quelli che vuoi davvero)
-  p.prof_G1 = PlannerProfile{30.0f, 0.050f}; // a_max, t_jerk
-  p.prof_G0 = PlannerProfile{60.0f, 0.030f};
+  p.prof_G1 = PlannerProfile{15.0f, 0.050f}; // a_max, t_jerk
+  p.prof_G0 = PlannerProfile{30.0f, 0.030f};
 
   // soglia delta
   p.min_delta_deg = 0.001f;

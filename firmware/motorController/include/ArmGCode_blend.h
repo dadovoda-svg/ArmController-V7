@@ -25,7 +25,7 @@ struct ArmGCodeConfig {
 };
 
 struct PlannerProfile {
-  float a_max_deg_s2 = 120.0f;  // base accel for the joint with max delta
+  float a_max_deg_s2 = 60.0f; //120.0f;  // base accel for the joint with max delta
   float t_jerk_s     = 0.050f;  // S-curve time (sec): j_max = a_max / t_jerk
 };
 
@@ -80,6 +80,10 @@ struct ArmGCodeHooks {
 class PlannerCoordinator {
 public:
   PlannerCoordinator() = default;
+
+  ~PlannerCoordinator() {
+    if (_q) delete[] _q;
+  }
 
   void begin(const PlannerConfig& cfg, const ArmGCodeHooks& hooks);
 

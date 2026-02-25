@@ -15,7 +15,12 @@ void PlannerCoordinator::begin(const PlannerConfig& cfg, const ArmGCodeHooks& ho
   if (_cfg.queue_max == 0) _cfg.queue_max = 1;
 
   if (_q) { delete[] _q; _q = nullptr; }
-  _q = new Move[_cfg.queue_max];
+  //_q = new Move[_cfg.queue_max];
+  _q = new (std::nothrow) Move[_cfg.queue_max];
+  if (!_q) {
+    //TODO
+    // Gestisci l'errore: memoria esaurita!
+  }
   _qHead = _qTail = _qCount = 0;
 
   _executing = false;
@@ -175,43 +180,91 @@ bool PlannerCoordinator::moveSettled() const {
   return true;
 }
 
+//versione ChatGPT
+// bool PlannerCoordinator::shouldBlendToNext(const Move& next) const {
+//   // Preconditions: ref hooks + cached limits must be available
+//   // Heuristic: switch to next target when remaining distance is within a multiple
+//   // of the estimated braking distance. This prevents the controller from starting
+//   // to decelerate hard toward intermediate waypoints.
+//   float worst_margin = 0.0f;
 
+//   for (int i = 0; i < 6; i++) {
+//     // Consider joints that are moving in current segment OR will move in next
+//     const bool curMoves  = (_moving_mask & (1u << i)) != 0;
+//     const bool nextMoves = (next.changed_mask & (1u << i)) != 0;
+//     if (!curMoves && !nextMoves) continue;
+
+//     const float pos = _hooks.get_ref_pos_one((uint8_t)i);
+//     const float vel = fabsf(_hooks.get_ref_vel_one((uint8_t)i));
+//     const float tgt = _cur.target_deg[i];
+
+//     const float rem = fabsf(tgt - pos);
+
+//     // Need a meaningful accel limit for this joint to estimate braking distance
+//     const float a = _amax_deg_s2[i];
+//     if (a <= 1e-6f) return false;
+
+//     const float d_brake = (vel * vel) / (2.0f * a); // deg
+//     const float window  = f_max(_blend_min_rem, _blend_k_brake * d_brake);
+
+//     // If any joint still has too much remaining, do not blend yet
+//     if (rem > window) return false;
+
+//     // Track margin for potential tuning/telemetry (optional)
+//     const float margin = window - rem;
+//     if (margin > worst_margin) worst_margin = margin;
+//   }
+
+//   // Extra safety: if current segment is extremely tiny, avoid thrashing
+//   // (still allows blending if ref is already very close)
+//   return true;
+// }
+
+// Versione Gemini
 bool PlannerCoordinator::shouldBlendToNext(const Move& next) const {
-  // Preconditions: ref hooks + cached limits must be available
-  // Heuristic: switch to next target when remaining distance is within a multiple
-  // of the estimated braking distance. This prevents the controller from starting
-  // to decelerate hard toward intermediate waypoints.
-  float worst_margin = 0.0f;
-
   for (int i = 0; i < 6; i++) {
-    // Consider joints that are moving in current segment OR will move in next
     const bool curMoves  = (_moving_mask & (1u << i)) != 0;
     const bool nextMoves = (next.changed_mask & (1u << i)) != 0;
+    
+    // Se il giunto non si muove né ora né dopo, lo ignoriamo
     if (!curMoves && !nextMoves) continue;
 
     const float pos = _hooks.get_ref_pos_one((uint8_t)i);
-    const float vel = fabsf(_hooks.get_ref_vel_one((uint8_t)i));
     const float tgt = _cur.target_deg[i];
-
+    const float vel = fabsf(_hooks.get_ref_vel_one((uint8_t)i));
     const float rem = fabsf(tgt - pos);
 
-    // Need a meaningful accel limit for this joint to estimate braking distance
-    const float a = _amax_deg_s2[i];
-    if (a <= 1e-6f) return false;
+    // 1. Calcoliamo la direzione attuale e la prossima
+    float current_dir = tgt - pos; 
+    float next_dir    = next.target_deg[i] - tgt;
 
-    const float d_brake = (vel * vel) / (2.0f * a); // deg
-    const float window  = f_max(_blend_min_rem, _blend_k_brake * d_brake);
+    // 2. Determiniamo se c'è un'inversione di marcia
+    // Controlliamo l'inversione solo se il prossimo movimento è significativo
+    bool isInverting = false;
+    if (nextMoves && fabsf(next_dir) > _cfg.min_delta_deg) {
+        // Se i segni sono diversi, il prodotto è negativo
+        if ((current_dir > 0 && next_dir < 0) || (current_dir < 0 && next_dir > 0)) {
+            isInverting = true;
+        }
+    }
 
-    // If any joint still has too much remaining, do not blend yet
+    // 3. Calcolo della finestra (Window)
+    float window;
+    if (isInverting) {
+        // Se inverte, usiamo solo il margine minimo di precisione
+        window = _blend_min_rem; 
+    } else {
+        // Se prosegue nella stessa direzione, usiamo la formula dinamica
+        const float a = _amax_deg_s2[i];
+        if (a <= 1e-6f) return false;
+        const float d_brake = (vel * vel) / (2.0f * a);
+        window = f_max(_blend_min_rem, _blend_k_brake * d_brake);
+    }
+
+    // Se un solo giunto è fuori dalla sua finestra, non facciamo blending
     if (rem > window) return false;
-
-    // Track margin for potential tuning/telemetry (optional)
-    const float margin = window - rem;
-    if (margin > worst_margin) worst_margin = margin;
   }
 
-  // Extra safety: if current segment is extremely tiny, avoid thrashing
-  // (still allows blending if ref is already very close)
   return true;
 }
 
@@ -283,13 +336,21 @@ bool ArmGCode::readLine() {
     }
 
     // Accumula caratteri
+    // if (_lineLen < _cfg.line_max) {
+    //   _lineBuf[_lineLen++] = ch;
+    // } else {
+    //   // overflow: continua a consumare fino al terminatore, poi segnala in handleLine()
+    //   // saturiamo per far scattare il check "line_too_long"
+    //   _lineLen = _cfg.line_max;
+    // }
+    //suggerimento Gemini
     if (_lineLen < _cfg.line_max) {
-      _lineBuf[_lineLen++] = ch;
+        _lineBuf[_lineLen++] = ch;
     } else {
-      // overflow: continua a consumare fino al terminatore, poi segnala in handleLine()
-      // saturiamo per far scattare il check "line_too_long"
-      _lineLen = _cfg.line_max;
+        // Abbiamo superato il limite, smettiamo di accumulare 
+        // ma non resettiamo _lineLen finché non arriva EOL
     }
+
   }
   return false;
 }
