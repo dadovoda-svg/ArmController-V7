@@ -25,6 +25,61 @@ void ConfigConsole::printPrompt()
     _io.print(F("> "));
 }
 
+// VERSIONE Gemini con protezione overflow
+void ConfigConsole::update()
+{
+    while (_io.available() > 0) {
+        char c = (char)_io.read();
+        
+        // Echo del carattere
+        _io.write(c);
+
+        if (c == '\r' || c == '\n') {
+            if (!_lastWasTerminator) {
+                // Se la lunghezza accumulata è pari o superiore al buffer,
+                // significa che abbiamo avuto un overflow.
+                if (_lineLen >= LINE_BUF_SIZE - 1) {
+                    _io.println(F("\n!!! ERROR: Command too long. Line discarded."));
+                } else if (_lineLen > 0) {
+                    _lineBuf[_lineLen] = '\0';
+                    handleLine(_lineBuf);
+                }
+
+                // Reset incondizionato del buffer
+                _lineLen = 0;
+                _lineBuf[0] = '\0';
+                printPrompt();
+                
+                _lastWasTerminator = true;
+            }
+            continue;
+        }
+
+        // Se riceviamo un carattere normale, azzeriamo il flag del terminatore
+        _lastWasTerminator = false;
+
+        // Gestione Backspace (BS=8, DEL=127)
+        if (c == 8 || c == 127) {
+            if (_lineLen > 0) {
+                _lineLen--;
+                // Non serve mettere \0 qui perché lo mettiamo alla fine della riga
+            }
+            continue;
+        }
+
+        // Accumulo con protezione:
+        // Se c'è spazio scriviamo, altrimenti incrementiamo solo il contatore.
+        // Questo serve a capire, all'arrivo del \n, se la riga è stata troncata.
+        if (_lineLen < (LINE_BUF_SIZE - 1)) {
+            _lineBuf[_lineLen++] = c;
+        } else {
+            // Impediamo l'accesso a memoria fuori limite, ma segniamo l'errore
+            _lineLen++; 
+        }
+    }
+}
+
+/* VERSIONE ChatGPT 
 void ConfigConsole::update()
 {
     while (_io.available() > 0) {
@@ -74,7 +129,7 @@ void ConfigConsole::update()
         // Se la linea è troppo lunga, tronchiamo e ignoriamo il resto
     }
 }
-
+ */
 void ConfigConsole::handleLine(char *line)
 {
     // Rimuovi spazi iniziali/finali

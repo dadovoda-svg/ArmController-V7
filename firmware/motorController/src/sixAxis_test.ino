@@ -372,6 +372,16 @@ void setup()
   char    szName[12];
   float   resetJoints[sixAxisController::NUM_JOINTS] = {0.0f};
 
+  // Aumenta il buffer da 256 a 1024 byte (da chiamare PRIMA di Serial.begin)
+  // ma è importante limitare l'intervallo tra l'invio delle righe. Gemini suggerisce:
+  // Se vuoi risolvere adesso senza riprogrammare l'ESP32, vai nelle impostazioni di Minicom:
+  // Ctrl-A poi O (Configure Minicom).
+  // Seleziona File transfer protocols.
+  // Scegli ASCII.
+  // Imposta Character escape timeout o cerca la voce Line Delay.
+  // Metti un ritardo di 50ms tra ogni riga.
+  // Questo darà all'ESP32 il tempo di "respirare" tra una scrittura e l'altra.
+  Serial.setRxBufferSize(1024);
   Serial.begin(115200);
   //UART1 su GPIO34 (RX) e GPIO23 (TX)
   Serial1.begin(115200, SERIAL_8N1, 34, 23);
