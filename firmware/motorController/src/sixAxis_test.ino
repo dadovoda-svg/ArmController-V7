@@ -56,6 +56,21 @@ const uint32_t  PID_PERIOD_uS = 5000;           //  5000us  200Hz
 const uint32_t  TICK_PERIOD_uS = 20000;  
 
 // Definizione parametri
+  // ma è importante limitare l'intervallo tra l'invio delle righe. Gemini suggerisce:
+  // Se vuoi risolvere adesso senza riprogrammare l'ESP32, vai nelle impostazioni di Minicom:
+  // Ctrl-A poi T (terminal settings) D (Newline tx delay)
+  // +---------------[Terminal settings]----------------+                                  
+  // |                                                  |                                  
+  // | A -      Terminal emulation : VT102              |                                  
+  // | B -     Backspace key sends : BS                 |                                  
+  // | C -          Status line is : enabled            |                                  
+  // | D -   Newline tx delay (ms) : 100                |                                  
+  // | E -          ENQ answerback : Minicom2.8         |                                  
+  // | F - Character tx delay (ms) : 0                  |                                  
+  // |    Change which setting?                         |                                  
+  // |                                                  |                                  
+  // +--------------------------------------------------+  
+  // Questo darà all'ESP32 il tempo di "respirare" tra una scrittura e l'altra.
 ConfigParam configParams[] = {        //corrente 0.67A
     { "spr0",  6400.00f,   0.0f },    //J1 - 200 s/giro, trasmissione 1:1, microstepping 1/32, polarità pos. -->  6400.00
     { "kp0",      10.0f,   0.0f },    //pid Propotional
@@ -68,6 +83,7 @@ ConfigParam configParams[] = {        //corrente 0.67A
     { "pt0",      1.80f,   0.0f },    //position tolerance [unit]
     { "vt0",      2.00f,   0.0f },    //velocity tolerance [unit]
     { "il0",     200.0f,   0.0f },    //integrator limit
+    { "tau0",     0.05f,   0.0f },    //velocity lowpass
     { "lmin0",  -175.0f,   0.0f },    //position limit min
     { "lmax0",   175.0f,   0.0f },    //position limit max
     { "p0",        0.0f,   0.0f },    //imposta la posizione del motore unico /solo per scopi di test
@@ -84,6 +100,7 @@ ConfigParam configParams[] = {        //corrente 0.67A
     { "pt1",       1.80f,   0.0f },    
     { "vt1",       2.00f,   0.0f },    
     { "il1",      200.0f,   0.0f },    
+    { "tau1",     0.05f,   0.0f },
     { "lmin1",    -110.0f,   0.0f },
     { "lmax1",     110.0f,   0.0f },
     { "p1",         0.0f,   0.0f },
@@ -101,6 +118,7 @@ ConfigParam configParams[] = {        //corrente 0.67A
     { "pt2",       1.80f,   0.0f },    
     { "vt2",       2.00f,   0.0f },    
     { "il2",      200.0f,   0.0f },    
+    { "tau2",     0.05f,   0.0f },
     { "lmin2",    -130.0f,   0.0f },
     { "lmax2",     130.0f,   0.0f },
     { "p2",         0.0f,   0.0f },
@@ -117,6 +135,7 @@ ConfigParam configParams[] = {        //corrente 0.67A
     { "pt3",       1.80f,   0.0f },    
     { "vt3",       2.00f,   0.0f },    
     { "il3",      200.0f,   0.0f },    
+    { "tau3",     0.05f,   0.0f },
     { "lmin3",    -92.0f,   0.0f },
     { "lmax3",    100.0f,   0.0f },
     { "p3",         0.0f,   0.0f },
@@ -133,6 +152,7 @@ ConfigParam configParams[] = {        //corrente 0.67A
     { "pt4",       1.80f,   0.0f },    
     { "vt4",       2.00f,   0.0f },    
     { "il4",      200.0f,   0.0f },    
+    { "tau4",     0.05f,   0.0f },
     { "lmin4",    -91.0f,   0.0f },
     { "lmax4",     91.0f,   0.0f },
     { "p4",         0.0f,   0.0f },
@@ -149,6 +169,7 @@ ConfigParam configParams[] = {        //corrente 0.67A
     { "pt5",       1.8f,   0.0f },    
     { "vt5",       2.0f,   0.0f },    
     { "il5",      200.0f,   0.0f },    
+    { "tau5",     0.05f,   0.0f },
     { "lmin5",    -91.0f,   0.0f },
     { "lmax5",     91.0f,   0.0f },
     { "p5",         0.0f,   0.0f },
@@ -158,7 +179,7 @@ ConfigParam configParams[] = {        //corrente 0.67A
     { "cht",         0.0f,   0.0f },    //canale visualizzato esportato in trace
   };
 
-constexpr uint32_t CONFIG_VERSION = 7;
+constexpr uint32_t CONFIG_VERSION = 8;
 
 ConfigStore   config("myapp_cfg",
                      configParams,
@@ -194,8 +215,8 @@ const PlannerConfig pcfg = []{
   p.queue_max = 16;
 
   // PROFILI (quelli che vuoi davvero)
-  p.prof_G1 = PlannerProfile{15.0f, 0.050f}; // a_max, t_jerk
-  p.prof_G0 = PlannerProfile{30.0f, 0.030f};
+  p.prof_G1 = PlannerProfile{10.0f, 0.050f}; // a_max, t_jerk
+  p.prof_G0 = PlannerProfile{20.0f, 0.030f};
 
   // soglia delta
   p.min_delta_deg = 0.001f;
@@ -367,20 +388,18 @@ void handleButtonChannel(bool reading);
 void startMotors();
 void stopMotors();
 
+// #include <nvs_flash.h>
+
 void setup()
 {
   char    szName[12];
   float   resetJoints[sixAxisController::NUM_JOINTS] = {0.0f};
 
   // Aumenta il buffer da 256 a 1024 byte (da chiamare PRIMA di Serial.begin)
-  // ma è importante limitare l'intervallo tra l'invio delle righe. Gemini suggerisce:
-  // Se vuoi risolvere adesso senza riprogrammare l'ESP32, vai nelle impostazioni di Minicom:
-  // Ctrl-A poi O (Configure Minicom).
-  // Seleziona File transfer protocols.
-  // Scegli ASCII.
-  // Imposta Character escape timeout o cerca la voce Line Delay.
-  // Metti un ritardo di 50ms tra ogni riga.
-  // Questo darà all'ESP32 il tempo di "respirare" tra una scrittura e l'altra.
+
+  // nvs_flash_erase(); // Cancella l'INTERA partizione NVS
+  // nvs_flash_init();  // La reinizializza vuota
+
   Serial.setRxBufferSize(1024);
   Serial.begin(115200);
   //UART1 su GPIO34 (RX) e GPIO23 (TX)

@@ -1,4 +1,5 @@
 #include "ArmGCode_blend.h"
+#include <new>
 #include <math.h>   // isfinite, fabsf
 
 // ----------------------

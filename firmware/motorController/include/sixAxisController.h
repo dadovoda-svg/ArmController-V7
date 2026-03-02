@@ -55,12 +55,14 @@ public:
             szParam[1][2] = '0' + i;        
             strcpy (szParam[2], "vt0");
             szParam[2][2] = '0' + i;        
+            strcpy (szParam[3], "tau0");
+            szParam[3][3] = '0' + i;        
             _ctrl[i].setIntegratorLimit(configParams.get(szParam[0]));
             _ctrl[i].setTolerances(configParams.get(szParam[1]), configParams.get(szParam[2]));
-            
+            _ctrl[i].setVelocityFilterTau(configParams.get(szParam[3]));            //0.05f adatto per 200Hz 0.03f adatto per 333Hz
+
             _ctrl[i].setOutputMax(0.0f);
             _ctrl[i].setDeadband(0.18f, 0.35f, 0.8f);
-            _ctrl[i].setVelocityFilterTau(0.10f);            //0.05f adatto per 200Hz 0.03f adatto per 333Hz
 
             // le posizioni attuali corrispondono al setpoint
             _ctrl[i].reset(joints[i]);
@@ -107,12 +109,14 @@ public:
             szParam[1][2] = '0' + i;        
             strcpy (szParam[2], "vt0");
             szParam[2][2] = '0' + i;        
+            strcpy (szParam[3], "tau0");
+            szParam[3][3] = '0' + i;        
             _ctrl[i].setIntegratorLimit(configParams.get(szParam[0]));
             _ctrl[i].setTolerances(configParams.get(szParam[1]), configParams.get(szParam[2]));
+            _ctrl[i].setVelocityFilterTau(configParams.get(szParam[3]));            //0.05f adatto per 200Hz 0.03f adatto per 333Hz
 
             _ctrl[i].setOutputMax(0.0f);
             _ctrl[i].setDeadband(0.18f, 0.35f, 0.8f);
-            _ctrl[i].setVelocityFilterTau(0.05f);           //0.05f adatto per 200Hz 0.03f adatto per 333Hz
         }
     }
     
