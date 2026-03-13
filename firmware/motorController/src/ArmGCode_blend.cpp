@@ -77,6 +77,8 @@ void PlannerCoordinator::estop() {
 }
 
 bool PlannerCoordinator::queuePush(const Move& m) {
+  // Allocation can fail on constrained targets: keep planner fail-safe.
+  if (!_q) return false;
   if (_qCount >= _cfg.queue_max) return false;
   _q[_qTail] = m;
   _qTail = (_qTail + 1) % _cfg.queue_max;
@@ -85,6 +87,7 @@ bool PlannerCoordinator::queuePush(const Move& m) {
 }
 
 bool PlannerCoordinator::queuePop(Move& out) {
+  if (!_q) return false;
   if (_qCount == 0) return false;
   out = _q[_qHead];
   _qHead = (_qHead + 1) % _cfg.queue_max;
@@ -93,6 +96,7 @@ bool PlannerCoordinator::queuePop(Move& out) {
 }
 
 bool PlannerCoordinator::queuePeek(Move& out) const {
+  if (!_q) return false;
   if (_qCount == 0) return false;
   out = _q[_qHead];
   return true;

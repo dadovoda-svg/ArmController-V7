@@ -38,7 +38,8 @@ MultiStepper6::MultiStepper6(const uint8_t stepPins[NUM_MOTORS],
                              uint32_t tPeriodUs)
 : pulseWidthUs(defaultPulseWidthUs),
   timerPeriodUs(tPeriodUs),
-  timerHandle(nullptr)
+  timerHandle(nullptr),
+  driversEnabled(false)
 {
   int64_t now = esp_timer_get_time();
 
@@ -67,11 +68,7 @@ void MultiStepper6::begin()
   }
   pinMode (MOTOR_ENABLE_PIN, OUTPUT);
   pinMode (MOTOR_ENABLE_AUXPIN, OUTPUT);
-  fastWritePin(MOTOR_ENABLE_PIN, false);        //false = enabled
-  fastWritePin(MOTOR_ENABLE_AUXPIN, false);
-  //motori temporaneamente disabilitati per il primo run
-  // fastWritePin(MOTOR_ENABLE_PIN, true);        //false = enabled
-  // fastWritePin(MOTOR_ENABLE_AUXPIN, true);
+  setEnabled(true);
 
   // Crea il timer ESP (gira nel task timer su core 0)list
   esp_timer_create_args_t args = {};
@@ -140,6 +137,14 @@ void MultiStepper6::setSpeed(uint8_t motorIndex, float speedStepsPerSec) {
 
   MotorState &m = motors[motorIndex];
 
+  if (!driversEnabled) {
+    m.speedStepsPerSec = 0.0f;
+    m.direction = 0;
+    m.stepIntervalUs = 0;
+    portEXIT_CRITICAL(&s_timerMux);
+    return;
+  }
+
   m.speedStepsPerSec = speedStepsPerSec;
 
   if (speedStepsPerSec > 0.0f) {
@@ -194,6 +199,25 @@ void MultiStepper6::stopAll()
   portEXIT_CRITICAL(&s_timerMux);
 }
 
+void MultiStepper6::setEnabled(bool enabled)
+{
+  if (!enabled) {
+    stopAll();
+  }
+
+  portENTER_CRITICAL(&s_timerMux);
+  // Hardware is active-low: LOW=enabled, HIGH=disabled.
+  fastWritePin(MOTOR_ENABLE_PIN, !enabled);
+  fastWritePin(MOTOR_ENABLE_AUXPIN, !enabled);
+  driversEnabled = enabled;
+  portEXIT_CRITICAL(&s_timerMux);
+}
+
+bool MultiStepper6::isEnabled() const
+{
+  return driversEnabled;
+}
+
 // static
 void MultiStepper6::timerCallback(void *arg)
 {
@@ -209,6 +233,11 @@ void MultiStepper6::onTimer()
   int64_t now = esp_timer_get_time(); // microsecondi dal boot
 
   portENTER_CRITICAL(&s_timerMux);
+
+  if (!driversEnabled) {
+    portEXIT_CRITICAL(&s_timerMux);
+    return;
+  }
 
   for (uint8_t i = 0; i < NUM_MOTORS; ++i) {
     MotorState &m = motors[i];

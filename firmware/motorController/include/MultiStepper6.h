@@ -29,6 +29,8 @@ class MultiStepper6
 
     void stopMotor(uint8_t motorIndex);
     void stopAll();
+    void setEnabled(bool enabled);
+    bool isEnabled() const;
 
     // Imposta il numero di step per 360° per un motore (considerando anche il microstepping).
     // Esempio: NEMA 200 step/rev con microstepping 1/16 -> 3200 step/rev.
@@ -66,6 +68,7 @@ class MultiStepper6
     float       pulseWidthUs;
     uint32_t    timerPeriodUs;
     esp_timer_handle_t timerHandle;
+    bool        driversEnabled;
 
         // == steps per revolution per ciascun motore ===
     float       stepsPerRev[NUM_MOTORS];

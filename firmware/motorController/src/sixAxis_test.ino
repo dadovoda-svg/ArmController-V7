@@ -198,6 +198,34 @@ uint8_t demoType = 0;
 
 static bool g_motors_enabled = false;
 static bool g_is_homed = false;
+extern bool motorsRunning;
+
+static uint8_t clampChannelParam(float value) {
+  int ch = (int)value;
+  if (ch < 0) ch = 0;
+  if (ch > 6) ch = 6;
+  return (uint8_t)ch;
+}
+
+static void applyDisplayChannel(float value) {
+  uint8_t ch = clampChannelParam(value);
+  if (ch == 0) {
+    displayEnabled = false;
+    return;
+  }
+  displayEnabled = true;
+  currentEncoderChannelDisplay = (int)ch - 1; // valid range: 0..5
+}
+
+static void applyTraceChannel(float value) {
+  uint8_t ch = clampChannelParam(value);
+  if (ch == 0) {
+    traceEnabled = false;
+    return;
+  }
+  traceEnabled = true;
+  currentEncoderChannelTrace = (int)ch - 1; // valid range: 0..5
+}
 // --------------------
 // Config globali già valorizzati
 // --------------------
@@ -263,24 +291,63 @@ static bool is_settled_one(uint8_t joint) {
   return joints.isSettled(joint);
 }
 
-// --- Motors/homing wrappers ---  TODO: da completare l'implementazione
+static bool read_joint_positions(float joints_deg[6], bool fail_on_encoder_error) {
+  bool ok = true;
+  for (uint8_t i = 0; i < sixAxisController::NUM_JOINTS; ++i) {
+    if (!encoderEnabled[i]) {
+      joints_deg[i] = 0.0f;
+      continue;
+    }
+
+    if (!encoders.readAngleZeroedDegreesSigned(i, joints_deg[i])) {
+      ok = false;
+      joints_deg[i] = joints.getLastMeas(i);  // fallback non bloccante
+      if (fail_on_encoder_error) return false;
+    }
+  }
+  return ok;
+}
+
+// --- Motors/homing wrappers ---
 static bool get_motors_enabled() { return g_motors_enabled; }
 static void set_motors_enabled(bool en) {
+  if (!en) {
+    steppers.stopAll();
+    steppers.setEnabled(false);
+    g_motors_enabled = false;
+    motorsRunning = false;
+    return;
+  }
+
+  float jointsNow[sixAxisController::NUM_JOINTS] = {0.0f};
+  read_joint_positions(jointsNow, false);
+  joints.setTarget(jointsNow);   // evita scatti al ri-enable
+  steppers.stopAll();
+  steppers.setEnabled(true);
   g_motors_enabled = en;
-  // arm.enableMotors(en);
+  motorsRunning = true;
 }
 
 static bool get_is_homed() { return g_is_homed; }
 
 static bool do_homing_all() {
-  // run your homing routine (blocking in this example)
-  // if successful:
+  float jointsHome[sixAxisController::NUM_JOINTS] = {0.0f};
+  if (!read_joint_positions(jointsHome, true)) {
+    return false;
+  }
+
+  steppers.stopAll();
+  joints.setTarget(jointsHome);  // soft-homing: allinea target alla posizione reale
   g_is_homed = true;
   return true;
 }
 
 static void estop_now() {
-  // immediately stop outputs / power stage
+  steppers.stopAll();
+  steppers.setEnabled(false);
+  g_motors_enabled = false;
+  g_is_homed = false;
+  motorsRunning = false;
 }
 
 // Callback chiamata quando un parametro cambia
@@ -299,25 +366,13 @@ void onConfigChanged(void* userData, const char* key, float oldVal, float newVal
   // Imposta un flag globale, che il loop() potrà usare
   configChanged = true;
 
-  if (strcmp(key, "chd") == 0) //i canali vanno da 1 a 6
+  if (strcmp(key, "chd") == 0) // i canali vanno da 1 a 6, 0 = disabled
   {
-    if (newVal == 0) {    //se ch = 0 disabilito anche il display
-      displayEnabled = false;
-    }
-    else {  //se maggiore di zero abilito il trave
-      displayEnabled = true;
-      currentEncoderChannelDisplay = ((int) newVal) - 1;
-    }
+    applyDisplayChannel(newVal);
   }
-  else if (strcmp(key, "cht") == 0) //i canali vanno da 1 a 6
+  else if (strcmp(key, "cht") == 0) // i canali vanno da 1 a 6, 0 = disabled
   {
-    if (newVal == 0) {    //se ch = 0 disabilito anche il display
-      traceEnabled = false;
-    }
-    else {  //se maggiore di zero abilito il trave
-      traceEnabled = true;
-      currentEncoderChannelTrace = ((int) newVal) - 1;
-    }
+    applyTraceChannel(newVal);
   }
   else if (   strcmp(key, "p0") == 0
       || strcmp(key, "p1") == 0
@@ -468,22 +523,10 @@ void setup()
   joints.loadParams(config, resetJoints);
 
   float newVal = config.get("chd");
-  if (newVal == 0) {    //se ch = 0 disabilito anche il display
-    displayEnabled = false;
-  }
-  else {  //se maggiore di zero abilito il trave
-    displayEnabled = true;
-    currentEncoderChannelDisplay = ((int) newVal) - 1;
-  }
+  applyDisplayChannel(newVal);
 
   newVal = config.get("cht");
-  if (newVal == 0) {    //se ch = 0 disabilito anche il display
-    traceEnabled = false;
-  }
-  else {  //se maggiore di zero abilito il trave
-    traceEnabled = true;
-    currentEncoderChannelTrace = ((int) newVal) - 1;
-  }
+  applyTraceChannel(newVal);
 
   // --- Motori ---
   steppers.begin();
@@ -679,12 +722,14 @@ void handleButtonChannel(bool reading)
 // =========================
 void startMotors()
 {
-  Serial.println("Motori: RUN");
+  set_motors_enabled(true);
+  Serial.println("## Motori: ENABLED");
 }
 
 void stopMotors()
 {
-  Serial.println("Motori: STOP");
+  set_motors_enabled(false);
+  Serial.println("## Motori: DISABLED");
 }
 
 // =========================
@@ -774,4 +819,3 @@ void updateDisplay()
 
   display.display();
 }
-
