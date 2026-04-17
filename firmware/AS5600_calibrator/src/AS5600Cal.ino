@@ -35,6 +35,10 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RES);
 #define STEP_DIR    19
 #define STEP_PULSE  22
 
+// ========== Timing ==========
+#define DISPLAY_UPDATE_MS 100
+#define KEY_SCAN_MS       20
+
 // ========== Interrupt Timer ==========
 esp_timer_handle_t toggle_timer;
 
@@ -67,6 +71,111 @@ uint16_t readWord(uint8_t regMSB) {
 }
 
 static inline int clamp(int v, int lo, int hi){ return v < lo ? lo : (v > hi ? hi : v); }
+
+// Track the AS5600 angle across multiple turns by unwrapping the 0..4095 value.
+float computeContinuousAngleDeg(uint16_t rawAngle) {
+  static bool initialized = false;
+  static int32_t turnCount = 0;
+  static uint16_t prevRawAngle = 0;
+
+  const int16_t wrapThreshold = 2048;  // Half a turn in AS5600 counts.
+
+  if (!initialized) {
+    prevRawAngle = rawAngle;
+    initialized = true;
+  } else {
+    int16_t delta = (int16_t)rawAngle - (int16_t)prevRawAngle;
+
+    if (delta > wrapThreshold) {
+      turnCount--;
+    } else if (delta < -wrapThreshold) {
+      turnCount++;
+    }
+
+    prevRawAngle = rawAngle;
+  }
+
+  int32_t continuousCounts = (turnCount * 4096L) + rawAngle;
+  return (continuousCounts * 360.0f) / 4096.0f;
+}
+
+uint8_t updateKeyStateMachine() {
+  static uint8_t state = 0;
+
+  switch (state) {
+    case 0:     //stato iniziale. se premo un tasto avvio il motore nella direzione desiderata
+      if (!digitalRead(12)) {
+        digitalWrite(STEP_EN, HIGH);
+        digitalWrite(STEP_DIR, HIGH);
+        state = 1;
+      }
+      else if (!digitalRead(14)) {
+        digitalWrite(STEP_EN, HIGH);
+        digitalWrite(STEP_DIR, LOW);
+        state = 2;
+      }
+      break;
+
+    case 1:   //è stato premuto o rilasciato il tasto 12, finchè è premuto resto qui
+      if (digitalRead(12)) {
+        digitalWrite(STEP_EN, LOW);
+        state = 3;
+      }
+      break;
+    case 2:   //è stato premuto o rilasciato il tasto 14, finchè è premuto resto qui
+      if (digitalRead(14)) {
+        digitalWrite(STEP_EN, LOW);
+        state = 4;
+      }
+      break;
+
+    case 3: //è stato rilasciato il tasto 12, la prossima pressione dello stesso avvia il motore indefinitamente
+            // se il tasto è cambiato, cambia direzione e entra in modalità temporanea per quella direzione
+      if (!digitalRead(12)) {
+        digitalWrite(STEP_EN, HIGH);
+        digitalWrite(STEP_DIR, HIGH);
+        state = 5;
+      }
+      else if (!digitalRead(14)) {
+        digitalWrite(STEP_EN, HIGH);
+        digitalWrite(STEP_DIR, LOW);
+        state = 2;
+      }
+      break;
+    case 4: //è stato rilasciato il tasto 14, la prossima pressione dello stesso avvia il motore indefinitamente
+            // se il tasto è cambiato, cambia direzione e entra in modalità temporanea per quella direzione
+      if (!digitalRead(12)) {
+        digitalWrite(STEP_EN, HIGH);
+        digitalWrite(STEP_DIR, HIGH);
+        state = 1;
+      }
+      else if (!digitalRead(14)) {
+        digitalWrite(STEP_EN, HIGH);
+        digitalWrite(STEP_DIR, LOW);
+        state = 6;
+      }
+      break;
+
+    case 5: //i cambi di stato del tasto 12 non modificano lo stao: il motore continua a girare, il 14 ferma tutto
+      if (!digitalRead(14)) {
+        digitalWrite(STEP_EN, LOW);
+        state = 0;
+      }
+      break;
+    case 6: //i cambi di stato del tasto 14 non modificano lo stao: il motore continua a girare, il 12 ferma tutto
+      if (!digitalRead(12)) {
+        digitalWrite(STEP_EN, LOW);
+        state = 0;
+      }
+      break;
+
+    default:
+      digitalWrite(STEP_EN, LOW);
+      state = 0;
+  }
+
+  return state;
+}
 
 // ---------- Setup ----------
 void setup() {
@@ -121,167 +230,99 @@ void setup() {
   delay(600);
 
   // Header CSV
-  Serial.println("timestamp_ms,MD,ML,MH,AGC,MAGNITUDE,RAW_ANGLE,ANGLE_deg");
+  Serial.println("timestamp_ms,MD,ML,MH,AGC,MAGNITUDE,RAW_ANGLE,ANGLE_deg,ANGLE_MULTI_deg");
 }
 
 // ---------- Loop ----------
 void loop() {
   uint32_t t = millis();
+  static uint32_t lastDisplayUpdateMs = 0;
+  static uint32_t lastKeyScanMs = 0;
+  static uint8_t keyState = 0;
 
-  uint8_t status     = readByte(REG_STATUS_H);
-  uint8_t agc        = readByte(REG_AGC);
-  uint16_t magnitude = readWord(REG_MAGNITUDE);
   uint16_t rawAngle  = readWord(REG_RAW_ANGLE);
 
-  uint8_t MD = (status & 0x20) ? 1 : 0;
-  uint8_t ML = (status & 0x10) ? 1 : 0;
-  uint8_t MH = (status & 0x08) ? 1 : 0;
-
   float angle_deg = (rawAngle * 360.0f) / 4096.0f;
+  float angle_multi_deg = computeContinuousAngleDeg(rawAngle);
 
-  // ---- Serial CSV ----
-  Serial.print(t);            Serial.print(',');
-  Serial.print(MD);           Serial.print(',');
-  Serial.print(ML);           Serial.print(',');
-  Serial.print(MH);           Serial.print(',');
-  Serial.print(agc);          Serial.print(',');
-  Serial.print(magnitude);    Serial.print(',');
-  Serial.print(rawAngle);     Serial.print(',');
-  Serial.println(angle_deg, 2);
-
-  // ---- OLED ----
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("AS5600 @Heltec");
-
-  display.print("Ang: ");
-  display.print(angle_deg, 1);
-  display.println(" deg");
-
-  display.print("MAG:");
-  display.print(magnitude);
-  display.print("  AGC:");
-  display.println(agc);
-
-  display.print("MD=");
-  display.print(MD); display.print(" ML=");
-  display.print(ML); display.print(" MH=");
-  display.println(MH);
-
-  // === Barra Magnitude ===
-  const int x0 = 4, y0 = 35, W = 120, H = 12;
-  display.drawRect(x0, y0, W, H, SSD1306_WHITE);      // bordo
-  int x25 = x0 + (W * 25) / 100;
-  int x75 = x0 + (W * 75) / 100;
-  display.drawFastVLine(x25, y0-2, H+4, SSD1306_WHITE);
-  display.drawFastVLine(x75, y0-2, H+4, SSD1306_WHITE);
-
-  int fillW = (int)((uint32_t)magnitude * W / 4095U);
-  fillW = clamp(fillW, 0, W-2);
-  if (fillW > 0) display.fillRect(x0+1, y0+1, fillW, H-2, SSD1306_WHITE);
-
-  int perc = (int)((uint32_t)magnitude * 100 / 4095U);
-  display.setCursor(x0 + W + 2, y0 + 8);
-  display.setTextSize(1);
-  display.print(" MAG:"); display.print(perc); display.print('%');
-
-
-  static uint8_t state=0;
-  display.setCursor(100, 56);
-  display.setTextSize(1);
-  //display.print("    "); 
-  display.print(digitalRead(12)); 
-  display.print(digitalRead(14)); 
-  display.print(" "); display.print(state);
-  
-  switch (state) {
-    case 0:     //stato iniziale. se premo un tasto avvio il motore nella direzione desiderata
-      if (!digitalRead(12)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, HIGH);      
-        state = 1;
-      }
-      else if (!digitalRead(14)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, LOW);      
-        state = 2;
-      }
-      break;
-
-    case 1:   //è stato premuto o rilasciato il tasto 12, finchè è premuto resto qui
-      if (digitalRead(12)) {
-        digitalWrite(STEP_EN, LOW);
-        state = 3;
-      }
-      break;
-    case 2:   //è stato premuto o rilasciato il tasto 14, finchè è premuto resto qui
-      if (digitalRead(14)) {
-        digitalWrite(STEP_EN, LOW);
-        state = 4;
-      }
-      break;
-    
-    case 3: //è stato rilasciato il tasto 12, la prossima pressione dello stesso avvia il motore indefinitamente
-            // se il tasto è cambiato, cambia direzione e entra in modalità temporanea per quella direzione
-      if (!digitalRead(12)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, HIGH);
-        state = 5;      
-      }
-      else if (!digitalRead(14)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, LOW); 
-        state = 2;     
-      }
-      break;     
-    case 4: //è stato rilasciato il tasto 14, la prossima pressione dello stesso avvia il motore indefinitamente
-            // se il tasto è cambiato, cambia direzione e entra in modalità temporanea per quella direzione
-      if (!digitalRead(12)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, HIGH);
-        state = 1;      
-      }
-      else if (!digitalRead(14)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, LOW); 
-        state = 6;     
-      }
-      break;
-
-    case 5: //i cambi di stato del tasto 12 non modificano lo stao: il motore continua a girare, il 14 ferma tutto
-      if (!digitalRead(14)) {
-        digitalWrite(STEP_EN, LOW);
-        state = 0;
-      }
-      break;
-    case 6: //i cambi di stato del tasto 14 non modificano lo stao: il motore continua a girare, il 12 ferma tutto
-      if (!digitalRead(12)) {
-        digitalWrite(STEP_EN, LOW);
-        state = 0;
-      }
-      break;
-
-    default:
-        digitalWrite(STEP_EN, LOW);
-        state = 0;
+  if ((uint32_t)(t - lastKeyScanMs) >= KEY_SCAN_MS) {
+    lastKeyScanMs = t;
+    keyState = updateKeyStateMachine();
   }
 
-  // if (!digitalRead(12)) {
-  //   digitalWrite(STEP_EN, HIGH);
-  //   digitalWrite(STEP_DIR, HIGH);      
-  // }
-  // else if (!digitalRead(14)) {
-  //   digitalWrite(STEP_EN, HIGH);
-  //   digitalWrite(STEP_DIR, LOW);      
-  // }
-  // else
-  //   digitalWrite(STEP_EN, LOW);
+  if ((uint32_t)(t - lastDisplayUpdateMs) >= DISPLAY_UPDATE_MS) {
+    lastDisplayUpdateMs = t;
 
-  display.display();
+    uint8_t status     = readByte(REG_STATUS_H);
+    uint8_t agc        = readByte(REG_AGC);
+    uint16_t magnitude = readWord(REG_MAGNITUDE);
+    
+    uint8_t MD = (status & 0x20) ? 1 : 0;
+    uint8_t ML = (status & 0x10) ? 1 : 0;
+    uint8_t MH = (status & 0x08) ? 1 : 0;
+
+  // ---- Serial CSV ----
+    Serial.print(t);            Serial.print(',');
+    Serial.print(MD);           Serial.print(',');
+    Serial.print(ML);           Serial.print(',');
+    Serial.print(MH);           Serial.print(',');
+    Serial.print(agc);          Serial.print(',');
+    Serial.print(magnitude);    Serial.print(',');
+    Serial.print(rawAngle);     Serial.print(',');
+    Serial.print(angle_deg, 2); Serial.print(',');
+    Serial.println(angle_multi_deg, 2);
+
+    // ---- OLED ----
+    display.clearDisplay();
+    display.setCursor(0,0);
+    //display.println("AS5600 @Heltec");
+
+    display.print("Ang: ");
+    display.print(angle_deg, 1);
+    display.println(" deg");
+
+    display.print("Pos: ");
+    display.print(angle_multi_deg, 1);
+    display.println(" deg");
+
+    display.print("MAG:");
+    display.print(magnitude);
+    display.print("  AGC:");
+    display.println(agc);
+
+    display.print("MD=");
+    display.print(MD); display.print(" ML=");
+    display.print(ML); display.print(" MH=");
+    display.println(MH);
+
+    // === Barra Magnitude ===
+    const int x0 = 4, y0 = 35, W = 120, H = 12;
+    display.drawRect(x0, y0, W, H, SSD1306_WHITE);      // bordo
+    int x25 = x0 + (W * 25) / 100;
+    int x75 = x0 + (W * 75) / 100;
+    display.drawFastVLine(x25, y0-2, H+4, SSD1306_WHITE);
+    display.drawFastVLine(x75, y0-2, H+4, SSD1306_WHITE);
+
+    int fillW = (int)((uint32_t)magnitude * W / 4095U);
+    fillW = clamp(fillW, 0, W-2);
+    if (fillW > 0) display.fillRect(x0+1, y0+1, fillW, H-2, SSD1306_WHITE);
+
+    int perc = (int)((uint32_t)magnitude * 100 / 4095U);
+    display.setCursor(x0 + W + 2, y0 + 8);
+    display.setTextSize(1);
+    display.print(" MAG:"); display.print(perc); display.print('%');
+
+    display.setCursor(100, 56);
+    display.setTextSize(1);
+    display.print(digitalRead(12));
+    display.print(digitalRead(14));
+    display.print(" "); display.print(keyState);
+
+    display.display();
+  }
 
   /*
   esp_timer_stop(toggle_timer);                     //arresta il timer
   esp_timer_start_periodic(toggle_timer, 1000000);  // cambia il periodo a 1s
   */
-  delay(50);
 }
