@@ -5,48 +5,74 @@
 #include <Adafruit_SSD1306.h>
 
 // ========== Heltec WiFi Kit 32 pin ==========
-#define I2C_SDA   4
-#define I2C_SCL   15
-#define OLED_RES  16
-#define VEXT_PIN  21    // Vext control: LOW=ON, HIGH=OFF (commenta se non serve)
-#define LED_PIN   25    //Led bianco
+constexpr uint8_t I2C_SDA_PIN = 4;
+constexpr uint8_t I2C_SCL_PIN = 15;
+constexpr uint8_t OLED_RES_PIN = 16;
+constexpr uint8_t VEXT_PIN = 21;    // Vext control: LOW=ON, HIGH=OFF (commenta se non serve)
+constexpr uint8_t LED_PIN = 25;     // Led bianco
 
 // ========== I2C addresses ==========
-#define OLED_ADDR    0x3C
-#define AS5600_ADDR  0x36
+constexpr uint8_t OLED_ADDR = 0x3C;
+constexpr uint8_t AS5600_ADDR = 0x36;
 
 // ========== AS5600 registers (MSB at lower addr) ==========
-#define REG_STATUS_H   0x0B
-#define REG_AGC        0x1A
-#define REG_MAGNITUDE  0x1B  // MSB; LSB=0x1C
-#define REG_RAW_ANGLE  0x0C  // MSB; LSB=0x0D
+constexpr uint8_t REG_STATUS_H = 0x0B;
+constexpr uint8_t REG_AGC = 0x1A;
+constexpr uint8_t REG_MAGNITUDE = 0x1B;  // MSB; LSB=0x1C
+constexpr uint8_t REG_RAW_ANGLE = 0x0C;  // MSB; LSB=0x0D
 
 // ========== OLED setup ==========
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RES);
+constexpr int SCREEN_WIDTH = 128;
+constexpr int SCREEN_HEIGHT = 64;
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RES_PIN);
 
 // ========== Stepper ==========
 // BLU    B-
 // ROSSO  B+
 // VERDE  A-
 // NERO   A+
-#define STEP_EN     23
-#define STEP_DIR    19
-#define STEP_PULSE  22
+constexpr uint8_t STEP_EN_PIN = 23;
+constexpr uint8_t STEP_DIR_PIN = 19;
+constexpr uint8_t STEP_PULSE_PIN = 22;
+
+// ========== Buttons ==========
+constexpr uint8_t BTN_LOWER_PIN = 12;
+constexpr uint8_t BTN_UPPER_PIN = 14;
 
 // ========== Timing ==========
-#define DISPLAY_UPDATE_MS 100
-#define KEY_SCAN_MS       20
+constexpr uint32_t DISPLAY_UPDATE_MS = 100;
+constexpr uint32_t KEY_SCAN_MS = 20;
 
 // ========== Interrupt Timer ==========
 esp_timer_handle_t toggle_timer;
+
+enum KeyState : uint8_t {
+  KEY_IDLE = 0,
+  KEY_LOWER_HELD,
+  KEY_UPPER_HELD,
+  KEY_LOWER_RELEASED,
+  KEY_UPPER_RELEASED,
+  KEY_LOWER_CONTINUOUS,
+  KEY_UPPER_CONTINUOUS
+};
+
+static inline bool isPressed(uint8_t pin) {
+  return digitalRead(pin) == LOW;
+}
+
+static inline void setMotorEnabled(bool enabled) {
+  digitalWrite(STEP_EN_PIN, enabled ? HIGH : LOW);
+}
+
+static inline void setMotorDirection(bool forward) {
+  digitalWrite(STEP_DIR_PIN, forward ? HIGH : LOW);
+}
 
 // ---------- ISR Timer ----------
 void onTimer(void* arg) {
   static bool led_state = false;
   led_state = !led_state;
-  digitalWrite(STEP_PULSE, led_state);
+  digitalWrite(STEP_PULSE_PIN, led_state);
   //digitalWrite(LED_PIN, led_state);
 }
 
@@ -99,79 +125,79 @@ float computeContinuousAngleDeg(uint16_t rawAngle) {
   return (continuousCounts * 360.0f) / 4096.0f;
 }
 
-uint8_t updateKeyStateMachine() {
-  static uint8_t state = 0;
+KeyState updateKeyStateMachine(bool lowerPressed, bool upperPressed) {
+  static KeyState state = KEY_IDLE;
 
   switch (state) {
-    case 0:     //stato iniziale. se premo un tasto avvio il motore nella direzione desiderata
-      if (!digitalRead(12)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, HIGH);
-        state = 1;
+    case KEY_IDLE:     //stato iniziale. se premo un tasto avvio il motore nella direzione desiderata
+      if (lowerPressed) {
+        setMotorEnabled(true);
+        setMotorDirection(true);
+        state = KEY_LOWER_HELD;
       }
-      else if (!digitalRead(14)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, LOW);
-        state = 2;
-      }
-      break;
-
-    case 1:   //è stato premuto o rilasciato il tasto 12, finchè è premuto resto qui
-      if (digitalRead(12)) {
-        digitalWrite(STEP_EN, LOW);
-        state = 3;
-      }
-      break;
-    case 2:   //è stato premuto o rilasciato il tasto 14, finchè è premuto resto qui
-      if (digitalRead(14)) {
-        digitalWrite(STEP_EN, LOW);
-        state = 4;
+      else if (upperPressed) {
+        setMotorEnabled(true);
+        setMotorDirection(false);
+        state = KEY_UPPER_HELD;
       }
       break;
 
-    case 3: //è stato rilasciato il tasto 12, la prossima pressione dello stesso avvia il motore indefinitamente
+    case KEY_LOWER_HELD:   //è stato premuto o rilasciato il tasto 12, finchè è premuto resto qui
+      if (!lowerPressed) {
+        setMotorEnabled(false);
+        state = KEY_LOWER_RELEASED;
+      }
+      break;
+    case KEY_UPPER_HELD:   //è stato premuto o rilasciato il tasto 14, finchè è premuto resto qui
+      if (!upperPressed) {
+        setMotorEnabled(false);
+        state = KEY_UPPER_RELEASED;
+      }
+      break;
+
+    case KEY_LOWER_RELEASED: //è stato rilasciato il tasto 12, la prossima pressione dello stesso avvia il motore indefinitamente
             // se il tasto è cambiato, cambia direzione e entra in modalità temporanea per quella direzione
-      if (!digitalRead(12)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, HIGH);
-        state = 5;
+      if (lowerPressed) {
+        setMotorEnabled(true);
+        setMotorDirection(true);
+        state = KEY_LOWER_CONTINUOUS;
       }
-      else if (!digitalRead(14)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, LOW);
-        state = 2;
+      else if (upperPressed) {
+        setMotorEnabled(true);
+        setMotorDirection(false);
+        state = KEY_UPPER_HELD;
       }
       break;
-    case 4: //è stato rilasciato il tasto 14, la prossima pressione dello stesso avvia il motore indefinitamente
+    case KEY_UPPER_RELEASED: //è stato rilasciato il tasto 14, la prossima pressione dello stesso avvia il motore indefinitamente
             // se il tasto è cambiato, cambia direzione e entra in modalità temporanea per quella direzione
-      if (!digitalRead(12)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, HIGH);
-        state = 1;
+      if (lowerPressed) {
+        setMotorEnabled(true);
+        setMotorDirection(true);
+        state = KEY_LOWER_HELD;
       }
-      else if (!digitalRead(14)) {
-        digitalWrite(STEP_EN, HIGH);
-        digitalWrite(STEP_DIR, LOW);
-        state = 6;
+      else if (upperPressed) {
+        setMotorEnabled(true);
+        setMotorDirection(false);
+        state = KEY_UPPER_CONTINUOUS;
       }
       break;
 
-    case 5: //i cambi di stato del tasto 12 non modificano lo stao: il motore continua a girare, il 14 ferma tutto
-      if (!digitalRead(14)) {
-        digitalWrite(STEP_EN, LOW);
-        state = 0;
+    case KEY_LOWER_CONTINUOUS: //i cambi di stato del tasto 12 non modificano lo stao: il motore continua a girare, il 14 ferma tutto
+      if (upperPressed) {
+        setMotorEnabled(false);
+        state = KEY_IDLE;
       }
       break;
-    case 6: //i cambi di stato del tasto 14 non modificano lo stao: il motore continua a girare, il 12 ferma tutto
-      if (!digitalRead(12)) {
-        digitalWrite(STEP_EN, LOW);
-        state = 0;
+    case KEY_UPPER_CONTINUOUS: //i cambi di stato del tasto 14 non modificano lo stao: il motore continua a girare, il 12 ferma tutto
+      if (lowerPressed) {
+        setMotorEnabled(false);
+        state = KEY_IDLE;
       }
       break;
 
     default:
-      digitalWrite(STEP_EN, LOW);
-      state = 0;
+      setMotorEnabled(false);
+      state = KEY_IDLE;
   }
 
   return state;
@@ -186,17 +212,17 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);      // Led off
   
-  pinMode(12, INPUT_PULLUP);
-  pinMode(14, INPUT_PULLUP);
-  digitalRead(12);                  // Pulsante inferiore
-  digitalRead(14);                  // Pulsante superiore
+  pinMode(BTN_LOWER_PIN, INPUT_PULLUP);
+  pinMode(BTN_UPPER_PIN, INPUT_PULLUP);
+  digitalRead(BTN_LOWER_PIN);       // Pulsante inferiore
+  digitalRead(BTN_UPPER_PIN);       // Pulsante superiore
 
-  pinMode(STEP_EN, OUTPUT);
-  digitalWrite(STEP_EN, LOW);    //23 verde ENABLE high = 0
-  pinMode(STEP_DIR, OUTPUT);
-  digitalWrite(STEP_DIR, HIGH);   //19 giallo DIR  high = 0
-  pinMode(STEP_PULSE, OUTPUT);
-  digitalWrite(STEP_PULSE, HIGH); //22 arancio  STEP  high = 0
+  pinMode(STEP_EN_PIN, OUTPUT);
+  digitalWrite(STEP_EN_PIN, LOW);    //23 verde ENABLE high = 0
+  pinMode(STEP_DIR_PIN, OUTPUT);
+  digitalWrite(STEP_DIR_PIN, HIGH);  //19 giallo DIR  high = 0
+  pinMode(STEP_PULSE_PIN, OUTPUT);
+  digitalWrite(STEP_PULSE_PIN, HIGH); //22 arancio  STEP  high = 0
   
   delay(20);
 
@@ -214,7 +240,7 @@ void setup() {
   Serial.begin(115200);
 
   // I2C su pin Heltec
-  Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
 
   // OLED init
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
@@ -238,7 +264,9 @@ void loop() {
   uint32_t t = millis();
   static uint32_t lastDisplayUpdateMs = 0;
   static uint32_t lastKeyScanMs = 0;
-  static uint8_t keyState = 0;
+  static KeyState keyState = KEY_IDLE;
+  bool lowerPressed = isPressed(BTN_LOWER_PIN);
+  bool upperPressed = isPressed(BTN_UPPER_PIN);
 
   uint16_t rawAngle  = readWord(REG_RAW_ANGLE);
 
@@ -247,7 +275,7 @@ void loop() {
 
   if ((uint32_t)(t - lastKeyScanMs) >= KEY_SCAN_MS) {
     lastKeyScanMs = t;
-    keyState = updateKeyStateMachine();
+    keyState = updateKeyStateMachine(lowerPressed, upperPressed);
   }
 
   if ((uint32_t)(t - lastDisplayUpdateMs) >= DISPLAY_UPDATE_MS) {
@@ -314,8 +342,8 @@ void loop() {
 
     display.setCursor(100, 56);
     display.setTextSize(1);
-    display.print(digitalRead(12));
-    display.print(digitalRead(14));
+    display.print(lowerPressed ? 0 : 1);
+    display.print(upperPressed ? 0 : 1);
     display.print(" "); display.print(keyState);
 
     display.display();
