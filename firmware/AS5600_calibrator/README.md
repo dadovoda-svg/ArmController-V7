@@ -1,25 +1,27 @@
 # AS5600Cal — Initial Magnetic Encoder Calibration (AS5600 + Heltec ESP32)
 
-This Arduino sketch is a small calibration/commissioning tool used during the **initial setup of a magnetic encoder (AS5600)** on a rotary axis.
-It helps you verify **magnet alignment, distance, and signal quality** while you slowly rotate the shaft with a step/dir driver, showing live data on an OLED and streaming CSV data over Serial.
+This Arduino sketch is a small calibration and commissioning tool for the **initial setup of an AS5600 magnetic encoder** on a rotary axis.
+It helps you verify **magnet alignment, distance, signal quality, and angle continuity across multiple turns** while rotating the shaft with a step/dir driver, showing live data on an OLED and streaming CSV data over Serial.
 
 ---
 
 ## What it does
 
-* Reads key AS5600 diagnostics via I²C:
-
+* Reads key AS5600 diagnostics over I2C:
   * **STATUS** bits: `MD`, `ML`, `MH`
   * **AGC** (automatic gain control)
   * **MAGNITUDE** (magnetic field strength proxy)
-  * **RAW_ANGLE** and computed **ANGLE (deg)**
-* Shows live values on a **128×64 SSD1306 OLED**
-* Generates a simple step pulse (square wave) using `esp_timer`
-* Provides a **two-button control** to rotate the axis in both directions:
-
-  * *Press & hold* = rotate while held
-  * *Press again* = continuous rotation
-  * *Other button* = stop
+  * **RAW_ANGLE**
+  * **ANGLE_deg**: single-turn angle in degrees
+  * **ANGLE_MULTI_deg**: continuous multi-turn angle in degrees
+* Reads `RAW_ANGLE` in the main loop as fast as possible
+* Updates the OLED and serial CSV output at a slower configurable rate
+* Scans the two buttons through a dedicated key state machine at its own configurable interval
+* Generates a step pulse square wave using `esp_timer`
+* Lets you rotate the axis in both directions with a two-button interface:
+  * *Press and hold* = rotate while held
+  * *Press the same button again* = continuous rotation
+  * *Press the other button* = stop
 
 ---
 
@@ -27,25 +29,25 @@ It helps you verify **magnet alignment, distance, and signal quality** while you
 
 ### MCU / Board
 
-* **Heltec WiFi Kit 32 (ESP32)** (as per pin mapping in the sketch)
+* **Heltec WiFi Kit 32 (ESP32)**
 
 ### Sensor
 
-* **AS5600** magnetic encoder (I²C address `0x36`)
+* **AS5600** magnetic encoder, I2C address `0x36`
 
 ### Display
 
-* **SSD1306 128×64 OLED** (I²C address `0x3C`)
+* **SSD1306 128x64 OLED**, I2C address `0x3C`
 
-### Motor driver (Step/Dir)
+### Motor driver
 
-* Any stepper driver accepting **STEP / DIR / EN** signals.
+* Any stepper driver accepting **STEP / DIR / EN** signals
 
 ---
 
-## Pin mapping (as in the sketch)
+## Pin mapping
 
-### I²C + OLED (Heltec)
+### I2C + OLED
 
 | Function              | GPIO |
 | --------------------- | ---: |
@@ -54,7 +56,7 @@ It helps you verify **magnet alignment, distance, and signal quality** while you
 | OLED RESET            |   16 |
 | VEXT control (Heltec) |   21 |
 
-> Note: On many Heltec boards, `VEXT` must be driven **LOW = ON** to power external peripherals (OLED/sensors). The sketch enables it.
+On many Heltec boards, `VEXT` must be driven **LOW = ON** to power external peripherals. The sketch enables it at startup.
 
 ### Buttons
 
@@ -63,70 +65,87 @@ It helps you verify **magnet alignment, distance, and signal quality** while you
 | Lower button |   12 | `INPUT_PULLUP` |
 | Upper button |   14 | `INPUT_PULLUP` |
 
-Buttons are assumed **active-low** (pressed = `0`).
+Buttons are active-low, so a pressed button reads `0`.
 
-### Step/Dir/Enable
+### Step / Dir / Enable
 
-| Signal       | GPIO |
-| ------------ | ---: |
-| EN           |   23 |
-| DIR          |   19 |
-| STEP (pulse) |   22 |
+| Signal | GPIO |
+| ------ | ---: |
+| EN     |   23 |
+| DIR    |   19 |
+| STEP   |   22 |
 
-In this sketch:
+In the current sketch:
 
-* `STEP_EN = HIGH` enables the driver
-* `STEP_EN = LOW` disables the driver
-  If your driver uses inverted logic, adjust accordingly.
+* `HIGH` on `STEP_EN_PIN` enables the driver
+* `LOW` on `STEP_EN_PIN` disables the driver
+
+If your driver uses inverted enable logic, adjust that helper.
 
 ---
 
-## Dependencies (Arduino libraries)
+## Dependencies
 
-Install these via Arduino Library Manager:
+Install these with the Arduino Library Manager:
 
 * **Adafruit GFX Library**
 * **Adafruit SSD1306**
 
-Also uses:
+Also used:
 
-* `Wire` (built-in)
-* `esp_timer.h` (ESP32 core; comment in code notes core 3.x)
+* `Wire`
+* `esp_timer.h`
 
 ---
 
 ## Build & upload
 
-1. Open `AS5600Cal.ino` in Arduino IDE (or PlatformIO with Arduino framework).
-2. Select the correct **ESP32 / Heltec** board profile.
-3. Connect AS5600 + OLED to the I²C bus (GPIO 4/15).
+1. Open `src/AS5600Cal.ino` in Arduino IDE or PlatformIO.
+2. Select the correct ESP32 / Heltec board.
+3. Connect the AS5600 and OLED to the I2C bus on GPIO `4` and `15`.
 4. Upload the sketch.
-5. Open Serial Monitor at **115200** baud.
+5. Open the Serial Monitor at **115200 baud**.
+
+---
+
+## Timing model
+
+The sketch separates fast and slow work:
+
+* **Fast loop**: reads `RAW_ANGLE` continuously and updates the multi-turn angle tracking
+* **Key scan loop**: scans buttons and updates the key state machine every `KEY_SCAN_MS`
+* **Display/log loop**: updates OLED and serial CSV every `DISPLAY_UPDATE_MS`
+
+Current code defaults:
+
+* `DISPLAY_UPDATE_MS = 100`
+* `KEY_SCAN_MS = 20`
 
 ---
 
 ## Serial output (CSV)
 
-The sketch prints one CSV line approximately every 50 ms:
+The sketch prints one CSV line every `DISPLAY_UPDATE_MS` milliseconds, so with the current default that is about every **100 ms**.
 
 **Header**
 
-```
-timestamp_ms,MD,ML,MH,AGC,MAGNITUDE,RAW_ANGLE,ANGLE_deg
+```text
+timestamp_ms,MD,ML,MH,AGC,MAGNITUDE,RAW_ANGLE,ANGLE_deg,ANGLE_MULTI_deg
 ```
 
 **Fields**
 
-* `timestamp_ms`: `millis()`
-* `MD`: Magnet detected (1/0)
-* `ML`: Magnetic field too low (1/0)
-* `MH`: Magnetic field too high (1/0)
-* `AGC`: automatic gain control value (0–255)
-* `MAGNITUDE`: 12-bit-ish magnitude reading (0–4095 range used in the UI scaling)
-* `RAW_ANGLE`: raw 12-bit angle (0–4095)
-* `ANGLE_deg`: converted angle in degrees
+* `timestamp_ms`: current `millis()`
+* `MD`: magnet detected (`1` or `0`)
+* `ML`: magnetic field too low (`1` or `0`)
+* `MH`: magnetic field too high (`1` or `0`)
+* `AGC`: automatic gain control value
+* `MAGNITUDE`: AS5600 magnetic magnitude reading
+* `RAW_ANGLE`: raw 12-bit angle, `0..4095`
+* `ANGLE_deg`: single-turn angle in degrees, `0..360`
+* `ANGLE_MULTI_deg`: continuous signed angle in degrees across multiple turns
 
-This is convenient for logging/plotting (e.g., Serial Plotter, Python, Excel).
+This is convenient for logging and plotting with tools such as Serial Plotter, Python, or Excel.
 
 ---
 
@@ -134,122 +153,135 @@ This is convenient for logging/plotting (e.g., Serial Plotter, Python, Excel).
 
 Displayed information:
 
-* Angle in degrees
+* Single-turn angle in degrees
+* Continuous multi-turn position in degrees
 * `MAGNITUDE` and `AGC`
-* `MD/ML/MH` status bits
-* A **magnitude bar** with reference marks around **25%** and **75%**
+* `MD / ML / MH` status bits
+* A magnitude bar with reference marks near **25%** and **75%**
+* Raw button levels plus the current key-state-machine state on the bottom line
 
 ---
 
-## Button control logic (how to rotate the axis)
+## Button control logic
 
-The sketch implements a simple state machine:
+The button handling is implemented in a separate helper with these logical states:
 
-### Temporary rotation (press & hold)
+* `KEY_IDLE`
+* `KEY_LOWER_HELD`
+* `KEY_UPPER_HELD`
+* `KEY_LOWER_RELEASED`
+* `KEY_UPPER_RELEASED`
+* `KEY_LOWER_CONTINUOUS`
+* `KEY_UPPER_CONTINUOUS`
 
-* From idle:
+User-visible behavior:
 
-  * Hold **GPIO12**: rotate direction A while held
-  * Hold **GPIO14**: rotate direction B while held
-* Releasing the button stops the motor.
+### Temporary rotation
+
+* From idle, hold **GPIO12** to rotate in one direction while held
+* From idle, hold **GPIO14** to rotate in the other direction while held
+* Releasing the button stops the motor
 
 ### Continuous rotation
 
-* After a hold-and-release in a direction:
+* After a hold-and-release in one direction, press the **same** button again to start continuous rotation
+* Press the **other** button to stop and return to idle
 
-  * Press the **same** button again → motor runs continuously
-  * Press the **other** button → stop (returns to idle)
-
-This lets you keep one hand free while watching the OLED / serial logs.
+This makes it easier to watch the OLED and serial data while the axis keeps turning.
 
 ---
 
-## Calibration workflow (recommended)
+## Multi-turn angle tracking
 
-1. **Mount the magnet** on the shaft (centered as well as possible).
-2. Power the system and confirm:
+The AS5600 raw angle wraps every revolution, so the sketch unwraps the `0..4095` raw value into a continuous signed angle.
 
-   * OLED shows values updating
-   * Serial CSV is streaming
-3. Without rotating yet, check:
+That means:
 
-   * `MD` should be **1** when the magnet is properly detected.
-4. Rotate slowly (temporary mode) and observe:
+* clockwise rotation can continue past `360`, `720`, `1080`, ...
+* counterclockwise rotation can go to negative angles such as `-360`, `-720`, ...
 
-   * `ML` should stay **0** (not too weak)
-   * `MH` should stay **0** (not too strong)
-   * `MAGNITUDE` should be stable and not near extremes
-5. Adjust **magnet distance / alignment** until you get:
+This is useful when checking encoder continuity through more than one full revolution.
 
+---
+
+## Calibration workflow
+
+1. Mount the magnet on the shaft as centered as possible.
+2. Power the system and confirm that:
+   * the OLED is updating
+   * serial CSV is streaming
+3. Without rotating yet, check that `MD` becomes `1`.
+4. Rotate slowly and observe:
+   * `ML` should stay `0`
+   * `MH` should stay `0`
+   * `MAGNITUDE` should remain reasonably stable
+5. Adjust magnet distance and alignment until you get:
    * `MD = 1`
    * `ML = 0`
    * `MH = 0`
-   * A comfortable magnitude bar (often mid-range is preferable)
-6. Once stable, you can run continuous mode and check for:
-
-   * Smooth `ANGLE_deg` progression over 0–360
-   * No sudden jumps/dropouts in `RAW_ANGLE`
-   * No unexpected toggling of `MD/ML/MH`
+   * a comfortable mid-range magnitude bar
+6. Then check:
+   * smooth `ANGLE_deg` progression over `0..360`
+   * smooth `ANGLE_MULTI_deg` progression across multiple turns
+   * no sudden dropouts in `RAW_ANGLE`
+   * no unexpected toggling of `MD`, `ML`, or `MH`
 
 ---
 
-## Tuning the speed (step rate)
+## Tuning the speed
 
-Step pulses are produced by `esp_timer_start_periodic(toggle_timer, 8000);`
+Step pulses are generated by:
 
-Important detail: the ISR **toggles** the STEP pin each callback, so:
+```cpp
+esp_timer_start_periodic(toggle_timer, 1000);
+```
 
-* Callback period = `T`
+Important detail: the timer callback **toggles** the STEP pin each time, so:
+
+* callback period = `T`
 * STEP square-wave period = `2T`
 * STEP frequency = `1 / (2T)`
 
-With `T = 8000 µs`:
+With `T = 1000 us`:
 
-* STEP frequency ≈ `1 / (2 * 0.008 s)` ≈ **62.5 Hz**
-  (approximately 62.5 steps per second, depending on how your driver counts edges)
+* STEP frequency is about **500 Hz**
 
-To rotate faster/slower, change `8000` (microseconds).
+If you want to rotate faster or slower, change that period in microseconds.
 
 ---
 
 ## Troubleshooting
 
 * **OLED init failed**
+  * Check OLED address `0x3C`
+  * Verify `VEXT_PIN` behavior on your Heltec board
+  * Confirm I2C wiring and pullups
 
-  * Check OLED address (default here: `0x3C`)
-  * Verify `VEXT_PIN` behavior on your Heltec revision
-  * Confirm I²C wiring and pullups (many modules already include pullups)
+* **`MD = 0` all the time**
+  * Magnet missing, too far away, badly centered, or wrong orientation
 
-* **MD = 0 always**
+* **`ML = 1` often**
+  * Magnetic field is too weak
 
-  * Magnet missing, too far, off-center, or wrong pole orientation
-  * Check sensor orientation vs magnet placement
-
-* **ML = 1 frequently**
-
-  * Field too weak: magnet too far or not centered
-
-* **MH = 1 frequently**
-
-  * Field too strong: magnet too close or too strong magnet
+* **`MH = 1` often**
+  * Magnetic field is too strong
 
 * **Motor does not rotate**
-
-  * Verify EN polarity for your driver (this sketch assumes HIGH=enable)
-  * Check STEP/DIR wiring and driver power stage supply
+  * Check enable polarity for your driver
+  * Verify STEP/DIR wiring and the motor power stage
 
 ---
 
 ## Notes
 
-* The sketch is intentionally minimal and aimed at **commissioning/calibration**, not production control.
+* This sketch is intentionally simple and aimed at **commissioning/calibration**, not production motion control.
 * If you move to a different ESP32 board, review:
-
-  * I²C pins
-  * OLED reset/power scheme
-  * available GPIOs for STEP/DIR/EN and buttons
+  * I2C pins
+  * OLED reset and power scheme
+  * available GPIOs for STEP, DIR, EN, and buttons
 
 ---
+
 ## Licenza
 
 MIT
