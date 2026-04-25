@@ -42,9 +42,16 @@ constexpr uint8_t BTN_UPPER_PIN = 14;
 // ========== Timing ==========
 constexpr uint32_t DISPLAY_UPDATE_MS = 100;
 constexpr uint32_t KEY_SCAN_MS = 20;
+constexpr uint32_t STEP_RUN_PERIOD_US = 65;
+constexpr uint32_t STEP_START_PERIOD_US = 800;
+constexpr uint32_t STEP_ACCEL_TIME_MS = 2000;
 
 // ========== Interrupt Timer ==========
 esp_timer_handle_t toggle_timer;
+bool motorEnabled = false;
+bool motorAccelerating = false;
+uint32_t currentStepPeriodUs = STEP_START_PERIOD_US;
+int64_t motorAccelStartUs = 0;
 
 enum KeyState : uint8_t {
   KEY_IDLE = 0,
@@ -66,6 +73,51 @@ static inline void setMotorEnabled(bool enabled) {
 
 static inline void setMotorDirection(bool forward) {
   digitalWrite(STEP_DIR_PIN, forward ? HIGH : LOW);
+}
+
+void setStepTimerPeriodUs(uint32_t periodUs) {
+  if (currentStepPeriodUs == periodUs) {
+    return;
+  }
+
+  esp_timer_stop(toggle_timer);
+  esp_timer_start_periodic(toggle_timer, periodUs);
+  currentStepPeriodUs = periodUs;
+}
+
+void startMotorMotion(bool forward) {
+  setMotorDirection(forward);
+  setStepTimerPeriodUs(STEP_START_PERIOD_US);
+  setMotorEnabled(true);
+  motorEnabled = true;
+  motorAccelerating = true;
+  motorAccelStartUs = esp_timer_get_time();
+}
+
+void stopMotorMotion() {
+  setMotorEnabled(false);
+  motorEnabled = false;
+  motorAccelerating = false;
+  setStepTimerPeriodUs(STEP_START_PERIOD_US);
+}
+
+void updateMotorAcceleration() {
+  if (!motorEnabled || !motorAccelerating) {
+    return;
+  }
+
+  const int64_t accelElapsedUs = esp_timer_get_time() - motorAccelStartUs;
+  const int64_t accelTimeUs = (int64_t)STEP_ACCEL_TIME_MS * 1000LL;
+
+  if (accelElapsedUs >= accelTimeUs) {
+    setStepTimerPeriodUs(STEP_RUN_PERIOD_US);
+    motorAccelerating = false;
+    return;
+  }
+
+  const int32_t periodRange = (int32_t)STEP_START_PERIOD_US - (int32_t)STEP_RUN_PERIOD_US;
+  const uint32_t nextPeriodUs = STEP_START_PERIOD_US - (uint32_t)((periodRange * accelElapsedUs) / accelTimeUs);
+  setStepTimerPeriodUs(nextPeriodUs);
 }
 
 // ---------- ISR Timer ----------
@@ -131,26 +183,24 @@ KeyState updateKeyStateMachine(bool lowerPressed, bool upperPressed) {
   switch (state) {
     case KEY_IDLE:     //stato iniziale. se premo un tasto avvio il motore nella direzione desiderata
       if (lowerPressed) {
-        setMotorEnabled(true);
-        setMotorDirection(true);
+        startMotorMotion(true);
         state = KEY_LOWER_HELD;
       }
       else if (upperPressed) {
-        setMotorEnabled(true);
-        setMotorDirection(false);
+        startMotorMotion(false);
         state = KEY_UPPER_HELD;
       }
       break;
 
     case KEY_LOWER_HELD:   //è stato premuto o rilasciato il tasto 12, finchè è premuto resto qui
       if (!lowerPressed) {
-        setMotorEnabled(false);
+        stopMotorMotion();
         state = KEY_LOWER_RELEASED;
       }
       break;
     case KEY_UPPER_HELD:   //è stato premuto o rilasciato il tasto 14, finchè è premuto resto qui
       if (!upperPressed) {
-        setMotorEnabled(false);
+        stopMotorMotion();
         state = KEY_UPPER_RELEASED;
       }
       break;
@@ -158,45 +208,41 @@ KeyState updateKeyStateMachine(bool lowerPressed, bool upperPressed) {
     case KEY_LOWER_RELEASED: //è stato rilasciato il tasto 12, la prossima pressione dello stesso avvia il motore indefinitamente
             // se il tasto è cambiato, cambia direzione e entra in modalità temporanea per quella direzione
       if (lowerPressed) {
-        setMotorEnabled(true);
-        setMotorDirection(true);
+        startMotorMotion(true);
         state = KEY_LOWER_CONTINUOUS;
       }
       else if (upperPressed) {
-        setMotorEnabled(true);
-        setMotorDirection(false);
+        startMotorMotion(false);
         state = KEY_UPPER_HELD;
       }
       break;
     case KEY_UPPER_RELEASED: //è stato rilasciato il tasto 14, la prossima pressione dello stesso avvia il motore indefinitamente
             // se il tasto è cambiato, cambia direzione e entra in modalità temporanea per quella direzione
       if (lowerPressed) {
-        setMotorEnabled(true);
-        setMotorDirection(true);
+        startMotorMotion(true);
         state = KEY_LOWER_HELD;
       }
       else if (upperPressed) {
-        setMotorEnabled(true);
-        setMotorDirection(false);
+        startMotorMotion(false);
         state = KEY_UPPER_CONTINUOUS;
       }
       break;
 
     case KEY_LOWER_CONTINUOUS: //i cambi di stato del tasto 12 non modificano lo stao: il motore continua a girare, il 14 ferma tutto
       if (upperPressed) {
-        setMotorEnabled(false);
+        stopMotorMotion();
         state = KEY_IDLE;
       }
       break;
     case KEY_UPPER_CONTINUOUS: //i cambi di stato del tasto 14 non modificano lo stao: il motore continua a girare, il 12 ferma tutto
       if (lowerPressed) {
-        setMotorEnabled(false);
+        stopMotorMotion();
         state = KEY_IDLE;
       }
       break;
 
     default:
-      setMotorEnabled(false);
+      stopMotorMotion();
       state = KEY_IDLE;
   }
 
@@ -235,7 +281,7 @@ void setup() {
   };
   esp_timer_create(&timer_args, &toggle_timer);
   // Avvia il timer ogni 500000 µs = 500 ms
-  esp_timer_start_periodic(toggle_timer, 1000);
+  esp_timer_start_periodic(toggle_timer, currentStepPeriodUs);
 
   Serial.begin(115200);
 
@@ -272,6 +318,8 @@ void loop() {
 
   float angle_deg = (rawAngle * 360.0f) / 4096.0f;
   float angle_multi_deg = computeContinuousAngleDeg(rawAngle);
+
+  updateMotorAcceleration();
 
   if ((uint32_t)(t - lastKeyScanMs) >= KEY_SCAN_MS) {
     lastKeyScanMs = t;
@@ -310,7 +358,7 @@ void loop() {
     display.println(" deg");
 
     display.print("Pos: ");
-    display.print(angle_multi_deg, 1);
+    display.print(angle_multi_deg * (20.0/360.0), 3);
     display.println(" deg");
 
     display.print("MAG:");
