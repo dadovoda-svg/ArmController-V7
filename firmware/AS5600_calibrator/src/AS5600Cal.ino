@@ -42,9 +42,13 @@ constexpr uint8_t BTN_UPPER_PIN = 14;
 // ========== Timing ==========
 constexpr uint32_t DISPLAY_UPDATE_MS = 100;
 constexpr uint32_t KEY_SCAN_MS = 20;
-constexpr uint32_t STEP_RUN_PERIOD_US = 65;
-constexpr uint32_t STEP_START_PERIOD_US = 800;
-constexpr uint32_t STEP_ACCEL_TIME_MS = 2000;
+// Velocissimo
+// constexpr uint32_t STEP_RUN_PERIOD_US = 65;
+// constexpr uint32_t STEP_START_PERIOD_US = 800;
+// constexpr uint32_t STEP_ACCEL_TIME_MS = 2000;
+constexpr uint32_t STEP_RUN_PERIOD_US = 1000;
+constexpr uint32_t STEP_START_PERIOD_US = 1000;
+constexpr uint32_t STEP_ACCEL_TIME_MS = 500;
 
 // ========== Interrupt Timer ==========
 esp_timer_handle_t toggle_timer;
